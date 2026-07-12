@@ -4,12 +4,23 @@
   - [ ] Sokoban:
     - [ ] Main Driver
     - [ ] Game Engine
-    - [ ] State Solver
+    - [ ] State Solver: Should be universal to any search algorithm
+      - [ ] Iterative Depth A* Solver.
+    - [ ] Pre Computation
     - [ ] Data Collection
   - [ ] HP Lattice
-    - [ ] Main Driver
-    - [ ] Game Engine
-    - [ ] State Solver
+    - [x] Main Driver
+    - [x] Game Engine
+    - [ ] State Solver: Should be universal to any search algorithm
+      - [ ] Branch and Bound Solver.
+    - [ ] Pre Computation
     - [ ] Data Collection
-- [ ] Phase 2: Data Collection
-- [ ] Phase 3: Data Analysis
+- [ ] Phase 2: Problem Testing:
+  - [ ] Sokoban:
+    - [ ] Test if Sokoban Solver for IDA* works for the maps.
+  - [ ] HP Lattice:
+    - [ ] Generate Proteins to test from ~100.
+- [ ] Phase 3: Data Collection
+  - [ ] Decide Variables to collect (Nodes, TTS, etc).
+- [ ] Phase 4: Data Analysis
+  - [ ] Prove Similarities.
