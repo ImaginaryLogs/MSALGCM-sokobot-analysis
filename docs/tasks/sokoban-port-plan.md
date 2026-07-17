@@ -19,11 +19,16 @@ algorithm.
 Chosen over faithful GBFS port, pure admissible IDA*, and TT-backed IDA*. **NOT literal IDA***:
 Sokoban has massive transposition (many push orders → same crate config), so pure O(depth) IDA*
 is intractable and a closed list is mandatory — a persistent closed list + iterative deepening is
-just weighted A* with IDA* cosmetics, so we name it honestly. Keeps a tunable `w` (preserves
-weight-tuning as the flagship transferable technique), is a complete systematic search (matches
-CONTEXT.md glossary, pairs cleanly vs Roan's B&B). `w=1` = admissible optimal baseline; `w>1` =
-bounded-suboptimal tuned runs. tasks.md's "IDA*" was self-imposed; the Korf citation still backs
-the weighted-search / bounded-suboptimal story. `algorithm` CSV value = `wastar` (was `widastar`).
+just weighted A* with IDA* cosmetics, so we name it honestly. Keeps a tunable `w` — the flagship
+**Sokoban-side** technique (tunable effort/quality tradeoff). **NOT claimed as a cross-domain
+"transferable technique":** `w` is A*-specific with no clean HP counterpart (Metropolis temperature
+/ NMCS playout depth are loose exploration-pressure analogies, not the same mechanism). The
+genuinely transferable thing is the **effort metric** `candidate_states_evaluated` (D6), the
+paradigm-neutral join key — not any single algorithmic knob. WA* is a complete systematic search
+(matches CONTEXT.md glossary, pairs cleanly vs Roan's B&B). `w=1` = admissible optimal baseline;
+`w>1` = bounded-suboptimal tuned runs. tasks.md's "IDA*" was self-imposed; the Korf citation still
+backs the weighted-search / bounded-suboptimal story. `algorithm` CSV value = `wastar` (was
+`widastar`).
 
 ### D2 — Base heuristic `h`: **greedy Manhattan sum**, behind a swappable `heuristic()` seam
 Each crate to nearest goal, summed; ignores walls + collisions; admissible. ~10 lines, ships
@@ -51,8 +56,14 @@ baseline is defined to include; constant across both arms, and it is the closed 
 crate-cell tuple + normalized player cell** (also the serial identity). Replaces Java's Base64
 bit-packing with a plain Python tuple hash. Memory is O(distinct states) by design (captured by
 `peak_frontier`); if a map OOMs, switch to a bounded/hashed TT (config flag, not redesign).
-`candidate_states_evaluated` = states expanded (popped + closed); no re-expansion ambiguity under
-weighted A*.
+
+**`candidate_states_evaluated` counts every candidate whose quality function was called** — i.e.
+increment on each successor you call `heuristic()` on, **including successors later dropped by the
+closed list or deadlock prune**. NOT pops-only. This makes the unit a paradigm-neutral "objective/
+heuristic evaluation" that lines up with the stochastic side (every proposed HP config whose energy
+is computed). Counting pops-only would under-count systematic effort vs stochastic sampling and
+bias the cross-domain join. Deadlock/closed-list drops are still *scored* work and must count. (See
+D6; needs Roan to confirm HP counts proposals-scored, not accepted-only.)
 
 ### D6 — Shared CSV schema (DRAFT — needs Enzo harness sign-off + Roan HP confirm)
 One row per run. NA where a column doesn't apply.
@@ -67,8 +78,9 @@ One row per run. NA where a column doesn't apply.
 | `weight_w` | tuning param (NA for stochastic) |
 | `symmetry_pruning` | 0/1 |
 | `seed` | RNG seed (NA/fixed for systematic) |
-| **`candidate_states_evaluated`** | **PRIMARY** — nodes expanded / samples drawn; the cross-domain join key |
-| `solved` | 1/0/timeout (or reached-E for HP) |
+| **`candidate_states_evaluated`** | **PRIMARY** — count of candidates whose quality fn was called (Sokoban: every successor scored by `heuristic()`, incl. ones later pruned by closed-list/deadlock — NOT pops-only; HP: every proposed config whose energy was computed). Paradigm-neutral effort unit; the cross-domain join key |
+| `solved` | `1` solved / `0` proven unsolvable (open list emptied) / `cutoff` (stopped early) — or reached-E for HP |
+| `cutoff_reason` | NA (solved/unsolvable) \| `budget` (eval cap hit) \| `clock` (wall-clock safety hit) |
 | `solution_quality` | push count / final energy |
 | `quality_target` | threshold used (optimal / energy E) |
 | `wall_clock_ms` | secondary TTS |
@@ -76,6 +88,12 @@ One row per run. NA where a column doesn't apply.
 | `git_sha` | provenance |
 
 Ablations = row filters on `weight_w` / `symmetry_pruning`, no schema change per experiment.
+
+**Stopping rule (keeps the primary metric reproducible):** primary stop = **eval budget** — cap
+`candidate_states_evaluated` at a fixed `N` shared across the whole map suite and all machines
+(config flag). Secondary = a hard **wall-clock safety** (e.g. 300 s) to kill true hangs only.
+Wall-clock must NOT be the primary cutoff — it would make eval counts machine-dependent censored
+data and poison the cross-domain axis. Log which fired via `cutoff_reason`.
 
 ### D7 — Module layout for `src/sokoban/` (deep modules, agentic-navigable)
 ```
@@ -88,40 +106,60 @@ src/sokoban/
   symmetry.py    # symmetry pruning (technique, on/off flag)
   metrics.py     # counters: candidate_states_evaluated, peak_frontier, timers
   emit.py        # CSV row writer — shared schema (D6)
-  loader.py      # headless map file -> Board (MUST match Java FileReader/MapData format for oracle parity)
-  oracle.py      # run Java solver, diff solution validity
-  cli.py         # run one/many maps; flags: --w, --symmetry, --base-h, --timeout, --seed
-tests/           # TDD; Java oracle solutions as fixtures
+  loader.py      # parse single maps/<name>.txt grid -> Board (chars below); no Java map/items split
+  validator.py   # PURE-PYTHON solution validator: replay push seq -> assert crates == goals (built wk1, primary bug net)
+  cli.py         # run one/many maps; flags: --w, --symmetry, --base-h, --eval-budget N, --timeout (clock safety), --seed
+tests/           # TDD; own solved maps + validator as fixtures (NOT Java solutions)
 maps/            # shared map suite
+# oracle.py      # OPTIONAL/DEFERRED — shell out to Java to confirm solvability + agree on solved/unsolved. Off wk1 critical path.
 ```
 - Successors live in `state.py` (split to `moves.py` only if >~200 lines).
-- `oracle.py` **is built** (cheap, catches silent solver bugs all of wk2–3).
-- `loader.py` map format = pin from Java `FileReader`/`MapData` at build time (fact, not decision).
+- **`validator.py` is the real safety net** (pure Python, no JVM): replay the emitted push sequence,
+  assert all crates land on goals; runs on every solve, catches silent solver bugs all of wk2–3.
+- **Java oracle removed from wk1.** Python `w=1` optimality is self-validated (admissible `h` +
+  correct `g>stored` predicate ⇒ optimal `Q*`), so no external optimal oracle is needed. A Java
+  `oracle.py` is optional/deferred — only adds independent *solvability* confirmation + false-negative
+  catch; build it later behind a flag if wanted, never on the schedule-risk week.
+- `loader.py` parses the single `.txt` directly. Chars: `#` wall, `.` goal, `$` crate, `@` player,
+  `*` crate+goal, `+` player+goal, ` ` floor (from Java `FileReader`/`SokoBot`, fact not decision).
 
-### D8 — Efficiency-ratio quality target: **first valid solution**
-Ratio = `baseline_evals / optimized_evals` to **first valid solution**; both arms stop at first
-solve. `solution_quality` (push count) reported alongside as the speed/quality tradeoff axis —
-the textbook WA* framing (`w` trades quality for speed). Symmetry pruning is optimality-preserving
-→ its ratio is a pure win at equal quality; weight-tuning trades quality for evals. Clean paper
-contrast. Upgrade to a Pareto plot in wk3 if ahead (data already captured).
+### D8 — Efficiency reporting: **one evals-vs-quality plane; scalar ratio only for the optimality-preserving arm**
+Both arms still stop at **first valid solution** (no solver change). But a scalar
+`baseline_evals / optimized_evals` is only defensible when quality is held equal — otherwise the
+ratio silently folds in a quality gap. So split by technique kind:
 
-## Oracle validation bar (all choices)
-Different algorithm by design → oracle checks **solution correctness only** (does Python's
-solution actually solve the map), NOT node counts. Even a faithful port wouldn't match Java
-counts (`int`-cast ties; Java `PriorityQueue` vs Python `heapq` tie-breaking). Do not chase
-count parity as a bug.
+- **Symmetry pruning (optimality-preserving)** → both arms reach optimal `Q*` by construction,
+  quality equal → **scalar efficiency ratio** `baseline_evals / optimized_evals` is clean and honest.
+- **Weight tuning (`w>1`, quality-trading)** → a first-valid-solution ratio is **not** a valid
+  efficiency number (worse quality bought the speedup). Report as a **Pareto curve**
+  (`candidate_states_evaluated` x, push-count y) sweeping `w`. No scalar ratio for this arm.
+
+Present both on a **single evals-vs-quality plot per map**: symmetry pruning = a point shifted left
+at the optimal-quality line (scalar ratio = horizontal distance there, read off the plot); weight
+tuning = a curve moving down-left as `w` rises. One figure, no apples-to-oranges, no confound. Data
+capture is identical either way (every run already logs evals + `solution_quality`), so **zero
+extra runs** — no anytime-search or re-solve machinery needed.
+
+## Validation bar (all choices)
+Primary check = **pure-Python `validator.py`**: replay the emitted push sequence, assert all crates
+land on goals. Correctness only, NOT node counts. Optimality of `w=1` is self-validated (admissible
+`h` + `g>stored`), so `Q*` needs no external oracle. If the Java oracle is ever built, it checks
+**solution validity / solvability agreement only**, never counts — even a faithful port wouldn't
+match Java counts (`int`-cast ties; Java `PriorityQueue` vs Python `heapq` tie-breaking). Do not
+chase count parity as a bug.
 
 ## Security (pre-existing — do not propagate)
-Discord bot token hardcoded in `CSINTSY-sokobot2024/main.py` ~L176. `oracle.py` shells out to the
-Java **solver**, which is not that file. Do NOT import/copy that file or the token into
+Discord bot token hardcoded in `CSINTSY-sokobot2024/main.py` ~L176. With the Java oracle removed
+from wk1, `src/sokoban/` no longer shells out to Java at all. If a deferred `oracle.py` is later
+built, it invokes the Java **solver**, not that file. Do NOT import/copy that file or the token into
 `src/sokoban/`. Flag/rotate if that code is ever touched.
 
 ## Build order (wk1, port = #1 schedule risk)
 1. `board.py` + `loader.py` (parity with Java map format) + `deadlock.py` precompute.
 2. `state.py` (push successors, normalization, canonical key).
-3. `heuristic.py` (Manhattan sum) + `solver.py` (WIDA* + TT).
+3. `heuristic.py` (Manhattan sum) + `solver.py` (weighted A* + closed-list TT, `g>stored` predicate).
 4. `metrics.py` + `emit.py` (CSV per D6).
-5. `oracle.py` + `tests/` (Java solutions as fixtures) → validate.
+5. `validator.py` (pure-Python replay: crates==goals) + `tests/` → validate every solve. (Java oracle deferred, optional.)
 6. `cli.py` flags. THEN Phase-2 techniques: symmetry pruning + weight sweep.
 Fallback if wk1 slips: keep Java, wrap for CSV emit — metric is language-agnostic, comparison
 still holds.
