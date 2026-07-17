@@ -5,12 +5,14 @@
 `MSALGCM-sokobot-analysis/src/sokoban/`. Everything below is orientation; the spec governs on conflict.
 
 ## What you are building
+
 A Python Sokoban solver for a **comparative search study** (Sokoban vs HP protein folding). The
 solver's job is to emit a paradigm-neutral **effort metric** per run to a shared CSV, not to be a
 production game AI. `CSINTSY-sokobot2024/` (Java) is a **reference, not source of truth** — its
 solver is greedy best-first (non-optimal); do NOT faithfully port its algorithm.
 
 ## Locked, do not re-litigate (grilled + advisor-checked)
+
 - **Algorithm:** Weighted A* + closed list, `f=g+w·h`, closed-list skip predicate is strict
   **`g > stored`** (NOT `≥` — `≥` drops equal-cost optimal paths). NOT IDA*.
 - **State:** crate-push macro moves; state = sorted crate tuple + **normalized** player cell
@@ -29,19 +31,22 @@ solver is greedy best-first (non-optimal); do NOT faithfully port its algorithm.
   passes blind. **Java oracle is removed from wk1** (optional/deferred).
 
 ## Build order (wk1 = #1 schedule risk)
+
 1. `board.py` + `loader.py` (parse single `maps/<name>.txt`: `#.$@*+` + space) + `deadlock.py`.
 2. `state.py` (push successors, normalization, canonical key).
-3. `heuristic.py` (Manhattan) + `solver.py` (WA* + closed-list TT, `g>stored`).
+3. `heuristic.py` (Manhattan) + `solver.py` (WA\* + closed-list TT, `g>stored`).
 4. `metrics.py` + `emit.py` (CSV, D6 schema).
 5. `validator.py` (replay + UCS optimality oracle) + `tests/` → validate every solve.
 6. `cli.py` flags. THEN Phase-2: Hungarian `h` (scalar-ratio arm) + weight sweep (Pareto arm).
 
 ## Do NOT
+
 - Import/copy `CSINTSY-sokobot2024/main.py` or its hardcoded Discord token into `src/sokoban/`.
 - Chase Java node-count parity (different algorithm by design).
 - Substitute best-found-so-far as pseudo-optimal on `w=1`-censored maps (corrupts ratios).
 
 ## Blocked on others (do not let these block the port)
+
 - **CSV schema D6** — DRAFT, needs Enzo (harness) + Roan (HP) sign-off. Which counter is the join
   key is **PROVISIONAL** pending Roan's HP engine choice. Log both counters so no re-run is needed.
 - **Map suite** (CJ + Enzo) — sized to Manhattan's reach so `w=1` solves under both `h` on every map.
