@@ -4,9 +4,10 @@ Owners: **CJ** = Sokoban · **Roan** = HP · **Enzo** = lit review + harness + p
 Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (present Aug 10). Today Jul 17.
 
 ## Phase 1: Building (wk1, Jul 17–24)
+
 - [ ] Sokoban — **CJ**
   - [ ] Port CSINTSY solver + headless map loader to `src/sokoban/` (Python). **Skip GUI/visualizer** — not in paper. Full spec: **`sokoban-port-plan.md`**.
-  - [ ] Implement **Weighted A* + closed list** (`f=g+w·h`, skip on `g>stored`) — NOT IDA* (Sokoban transposition makes a closed list mandatory).
+  - [ ] Implement **Weighted A\* + closed list** (`f=g+w·h`, skip on `g>stored`) — NOT IDA\* (Sokoban transposition makes a closed list mandatory).
   - [ ] Instrumentation → CSV: log BOTH `nodes_expanded` + `candidates_scored`; eval-budget stop + `cutoff_reason`.
   - [ ] **Pure-Python `validator.py`** (validity replay + small-map UCS optimality oracle: assert `w=1`==BFS `Q*`). Java oracle removed from wk1 (optional/deferred).
   - [ ] Fallback if wk1 slips: keep Java, wrap for data (eval metric is language-agnostic).
@@ -21,22 +22,26 @@ Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (pres
   - [ ] Lit Review doc (due Jul 24) — see split below.
 
 ## Phase 2: Techniques + test sets (wk2, Jul 24–31)
+
 - [ ] Commit techniques (each with ablation flag):
   - [ ] **Heuristic weight tuning** (CJ Sokoban / Roan HP) — `w>1`, quality-trading → **Pareto curve** (no scalar ratio).
   - [ ] **Heuristic strength** (CJ) — Manhattan vs **Hungarian** `h` @ `w=1`, optimality-preserving → **scalar efficiency ratio**. Replaces symmetry pruning.
-  - [ ] *Dropped:* symmetry pruning — board symmetry rare → ~null ratios; optional stretch only.
-  - [ ] *Stretch:* macro-graph tunnel abstraction (Botea) — only if ahead; weakest transfer.
+  - [ ] _Dropped:_ symmetry pruning — board symmetry rare → ~null ratios; optional stretch only.
+  - [ ] _Stretch:_ macro-graph tunnel abstraction (Botea) — only if ahead; weakest transfer.
 - [ ] Test sets: Sokoban map suite (CJ) · ~100 generated proteins (Roan/Enzo).
 - [ ] Paper skeleton + Methods + related-work drafted early (Enzo) — writable before results exist.
 
 ## Phase 3: Data (wk3, Jul 31–Aug 7)
+
 - [ ] Feature freeze. Full runs both domains → CSV.
 - [ ] Analysis notebook: efficiency ratios, per-technique ablation, scaling curves.
 
 ## Phase 4: Paper
+
 - [ ] Aug 7 submit. Aug 10 present.
 
 ## Measurement (revised via grill — see `sokoban-port-plan.md` D5/D6/D8)
+
 - **Primary metric:** candidate states evaluated. Sokoban logs BOTH `nodes_expanded` + `candidates_scored`; cross-domain join key **PROVISIONAL** pending Roan's HP engine (Metropolis proposal ↔ `candidates_scored`; NMCS playout / B&B expansions ↔ `nodes_expanded`). Paradigm-neutral.
 - **Baseline:** vanilla solver — dedup (closed list) only, `w=1`, Manhattan `h`.
 - **Efficiency reporting:** scalar ratio **only** for the optimality-preserving arm (equal quality); weighted arm → **Pareto curve** (evals vs push-count). One evals-vs-quality plot per map.
@@ -46,7 +51,9 @@ Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (pres
 - **`w=1` optimality is verified** (small-map UCS oracle), not assumed. Systematic = "evals to solved/optimal"; MC = "evals to reach energy E". Comparable as work-to-target.
 
 ## Lit Review split (due Jul 24)
+
 Each builder annotates their own 4 (they're the build sources); Enzo sources missing textbooks/conf pubs + writes synthesis.
+
 - **CJ:** Junghanns 2001, Botea 2003, Korf 2001, Culberson 1997.
 - **Roan:** Lau-Dill 1989, Berger-Leighton 1998, Crescenzi 1998, Roucairol 2023.
 - **Enzo:** 2 textbooks + 2 conference pubs (missing) + write the review; = paper's related-work early.
