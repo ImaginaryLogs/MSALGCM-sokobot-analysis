@@ -32,9 +32,25 @@ backs the weighted-search / bounded-suboptimal story. `algorithm` CSV value = `w
 
 ### D2 — Base heuristic `h`: **greedy Manhattan sum**, behind a swappable `heuristic()` seam
 Each crate to nearest goal, summed; ignores walls + collisions; admissible. ~10 lines, ships
-week 1. **Hungarian min-cost matching** is a noted later upgrade — same signature, becomes an
-extra ablation row if ahead. (Java's multiplicative product is non-admissible — do NOT reuse it
-as `h`.)
+week 1. **Hungarian min-cost matching** = same-signature upgrade and a **committed Phase-2 build**:
+it is the strong-`h` half of the optimality-preserving experimental arm (Manhattan vs Hungarian @
+`w=1`, D8), so it gets built regardless. It *also* doubles as the anchor rescue lever (tighter bound
+⇒ fewer evals ⇒ `w=1` finishes) if a map slips past Manhattan's reach — but suite sizing (below)
+makes that a contingency, not the reason to build it. (Java's multiplicative product is
+non-admissible — do NOT reuse it as `h`.)
+
+**Baseline-anchor rule (`w=1` must actually reach optimal `Q*`):** the Pareto plot's optimal-quality
+line and the heuristic-strength scalar ratio (D8) both require `w=1` to prove optimal on a map. If `w=1` hits
+the eval budget first:
+- **exclude** that map from anchored analysis, logged as `w=1`-censored (`solved=cutoff`). Do NOT
+  substitute best-found-so-far as pseudo-optimal — it isn't proven optimal and would silently
+  corrupt every ratio on that map.
+- **Suite is sized to Manhattan's reach** (governing rule): both `h` solve *every* suite map at
+  `w=1`, so the heuristic-strength scalar ratio (D8) is defined throughout. Hungarian's rescue role
+  is a **contingency**, not a suite-sizing target — it fires only if a map assumed within Manhattan's
+  reach turns out censored. Maps where Manhattan is genuinely censored have no `weak_h` eval count,
+  so they cannot enter the scalar ratio anyway; report those separately as anecdote if wanted, never
+  fold into the headline ratio.
 
 ### D3 — Move granularity: **crate-push (macro) level**
 State = crate config + player's **reachable region, normalized** (flood-fill; player collapsed to
@@ -57,13 +73,16 @@ crate-cell tuple + normalized player cell** (also the serial identity). Replaces
 bit-packing with a plain Python tuple hash. Memory is O(distinct states) by design (captured by
 `peak_frontier`); if a map OOMs, switch to a bounded/hashed TT (config flag, not redesign).
 
-**`candidate_states_evaluated` counts every candidate whose quality function was called** — i.e.
-increment on each successor you call `heuristic()` on, **including successors later dropped by the
-closed list or deadlock prune**. NOT pops-only. This makes the unit a paradigm-neutral "objective/
-heuristic evaluation" that lines up with the stochastic side (every proposed HP config whose energy
-is computed). Counting pops-only would under-count systematic effort vs stochastic sampling and
-bias the cross-domain join. Deadlock/closed-list drops are still *scored* work and must count. (See
-D6; needs Roan to confirm HP counts proposals-scored, not accepted-only.)
+**Log BOTH counters — do not collapse them (cheap, `metrics.py` already has the infra):**
+- `nodes_expanded` — states popped + closed (the prior locked value).
+- `candidates_scored` — every successor you call `heuristic()` on, **including ones later dropped by
+  closed list or deadlock prune** (NOT pops-only).
+
+**Which one is the cross-domain join key is PROVISIONAL** — it depends on Roan's unchosen HP engine
+(D6 unsigned): a Metropolis proposal = 1 energy eval (lines up with `candidates_scored`); an NMCS
+sample = a nested playout = *many* evals; B&B = node expansions (lines up with `nodes_expanded`).
+Capturing both now means no re-run whichever way Roan lands. Populate `candidate_states_evaluated`
+(D6) from whichever counter the signed schema selects; default `candidates_scored` pending sign-off.
 
 ### D6 — Shared CSV schema (DRAFT — needs Enzo harness sign-off + Roan HP confirm)
 One row per run. NA where a column doesn't apply.
@@ -73,12 +92,15 @@ One row per run. NA where a column doesn't apply.
 | `run_id` | unique |
 | `domain` | `sokoban`\|`hp` |
 | `instance_id` | map name / protein id |
-| `instance_size` | cells / chain length |
+| `instance_size` | **difficulty axis** — Sokoban: **crate count** (combinatorial driver, parallels HP chain length); HP: chain length |
+| `grid_cells` | optional secondary — Sokoban free/total cell count (NA for HP); geometry context, NOT the headline size |
 | `algorithm` | `wastar`\|`bnb`\|`nmcs`\|`metropolis` |
 | `weight_w` | tuning param (NA for stochastic) |
-| `symmetry_pruning` | 0/1 |
+| `base_h` | `manhattan`\|`hungarian` — the optimality-preserving arm (both at `w=1`); replaces dropped `symmetry_pruning` |
 | `seed` | RNG seed (NA/fixed for systematic) |
-| **`candidate_states_evaluated`** | **PRIMARY** — count of candidates whose quality fn was called (Sokoban: every successor scored by `heuristic()`, incl. ones later pruned by closed-list/deadlock — NOT pops-only; HP: every proposed config whose energy was computed). Paradigm-neutral effort unit; the cross-domain join key |
+| **`candidate_states_evaluated`** | **PRIMARY (join key PROVISIONAL — pending Roan/D6 sign-off)** — populated from whichever Sokoban counter the signed schema picks; default `candidates_scored`. See D5: log BOTH `nodes_expanded` and `candidates_scored`, because HP engine choice (Metropolis 1-eval/proposal vs NMCS nested playout vs B&B expansions) determines which is comparable |
+| `nodes_expanded` | Sokoban: states popped+closed (raw, always logged) |
+| `candidates_scored` | Sokoban: every successor scored by `heuristic()`, incl. closed/deadlock-pruned (raw, always logged) |
 | `solved` | `1` solved / `0` proven unsolvable (open list emptied) / `cutoff` (stopped early) — or reached-E for HP |
 | `cutoff_reason` | NA (solved/unsolvable) \| `budget` (eval cap hit) \| `clock` (wall-clock safety hit) |
 | `solution_quality` | push count / final energy |
@@ -87,7 +109,7 @@ One row per run. NA where a column doesn't apply.
 | `peak_frontier` | memory proxy — Sokoban: max(open+closed) size (weighted A*); HP: note its own meaning so cross-domain reads aren't taken as inconsistent |
 | `git_sha` | provenance |
 
-Ablations = row filters on `weight_w` / `symmetry_pruning`, no schema change per experiment.
+Ablations = row filters on `weight_w` / `base_h`, no schema change per experiment.
 
 **Stopping rule (keeps the primary metric reproducible):** primary stop = **eval budget** — cap
 `candidate_states_evaluated` at a fixed `N` shared across the whole map suite and all machines
@@ -102,13 +124,13 @@ src/sokoban/
   state.py       # push-state: crates + player region, normalization, canonical key, legal-push successors
   heuristic.py   # base-h seam (Manhattan sum now; Hungarian later — same signature)
   deadlock.py    # static dead-square reverse-pull BFS (constant infra)
-  solver.py      # weighted A*: f=g+w·h, closed-list TT (skip on g>stored), symmetry hook
-  symmetry.py    # symmetry pruning (technique, on/off flag)
-  metrics.py     # counters: candidate_states_evaluated, peak_frontier, timers
+  solver.py      # weighted A*: f=g+w·h, closed-list TT (skip on g>stored)
+  metrics.py     # counters: nodes_expanded + candidates_scored (both, see D5), peak_frontier, timers
   emit.py        # CSV row writer — shared schema (D6)
   loader.py      # parse single maps/<name>.txt grid -> Board (chars below); no Java map/items split
-  validator.py   # PURE-PYTHON solution validator: replay push seq -> assert crates == goals (built wk1, primary bug net)
-  cli.py         # run one/many maps; flags: --w, --symmetry, --base-h, --eval-budget N, --timeout (clock safety), --seed
+  validator.py   # PURE-PYTHON: (a) replay push seq -> assert crates==goals (validity); (b) small-map optimality oracle: uniform-cost BFS over push graph, assert w=1 Q* == BFS optimal
+  cli.py         # run one/many maps; flags: --w, --base-h {manhattan|hungarian}, --eval-budget N, --timeout (clock safety), --seed
+# symmetry.py    # DROPPED from headline — optional stretch only (see D8); board symmetry rare, ~null ratios
 tests/           # TDD; own solved maps + validator as fixtures (NOT Java solutions)
 maps/            # shared map suite
 # oracle.py      # OPTIONAL/DEFERRED — shell out to Java to confirm solvability + agree on solved/unsolved. Off wk1 critical path.
@@ -116,10 +138,12 @@ maps/            # shared map suite
 - Successors live in `state.py` (split to `moves.py` only if >~200 lines).
 - **`validator.py` is the real safety net** (pure Python, no JVM): replay the emitted push sequence,
   assert all crates land on goals; runs on every solve, catches silent solver bugs all of wk2–3.
-- **Java oracle removed from wk1.** Python `w=1` optimality is self-validated (admissible `h` +
-  correct `g>stored` predicate ⇒ optimal `Q*`), so no external optimal oracle is needed. A Java
-  `oracle.py` is optional/deferred — only adds independent *solvability* confirmation + false-negative
-  catch; build it later behind a flag if wanted, never on the schedule-risk week.
+- **Java oracle removed from wk1** — but NOT because optimality goes unchecked. Optimality is
+  verified by the in-Python **small-map UCS oracle in `validator.py`** (assert `w=1` `Q*` == BFS
+  optimal), which is strictly stronger than the greedy (non-optimal) Java solver for this. "Admissible
+  `h` + `g>stored`" argues the *algorithm* is optimal; the UCS oracle catches an *implementation* bug
+  (e.g. `g≥stored`). A Java `oracle.py` is optional/deferred — only adds independent *solvability*
+  confirmation + false-negative catch; build later behind a flag, never on the schedule-risk week.
 - `loader.py` parses the single `.txt` directly. Chars: `#` wall, `.` goal, `$` crate, `@` player,
   `*` crate+goal, `+` player+goal, ` ` floor (from Java `FileReader`/`SokoBot`, fact not decision).
 
@@ -128,22 +152,34 @@ Both arms still stop at **first valid solution** (no solver change). But a scala
 `baseline_evals / optimized_evals` is only defensible when quality is held equal — otherwise the
 ratio silently folds in a quality gap. So split by technique kind:
 
-- **Symmetry pruning (optimality-preserving)** → both arms reach optimal `Q*` by construction,
-  quality equal → **scalar efficiency ratio** `baseline_evals / optimized_evals` is clean and honest.
+- **Heuristic strength (optimality-preserving)** → Manhattan (weak `h`) vs Hungarian (strong `h`),
+  both `w=1`; both prove optimal `Q*`, quality equal by construction → **scalar efficiency ratio**
+  `weak_h_evals / strong_h_evals` is clean and honest, and fires on *every* solved map (no
+  null-result trap). This is the second experimental arm.
 - **Weight tuning (`w>1`, quality-trading)** → a first-valid-solution ratio is **not** a valid
   efficiency number (worse quality bought the speedup). Report as a **Pareto curve**
   (`candidate_states_evaluated` x, push-count y) sweeping `w`. No scalar ratio for this arm.
 
-Present both on a **single evals-vs-quality plot per map**: symmetry pruning = a point shifted left
-at the optimal-quality line (scalar ratio = horizontal distance there, read off the plot); weight
-tuning = a curve moving down-left as `w` rises. One figure, no apples-to-oranges, no confound. Data
-capture is identical either way (every run already logs evals + `solution_quality`), so **zero
-extra runs** — no anytime-search or re-solve machinery needed.
+Present both on a **single evals-vs-quality plot per map**: heuristic strength = a point shifted
+left at the optimal-quality line (scalar ratio = horizontal distance there, read off the plot);
+weight tuning = a curve moving down-left as `w` rises. One figure, no apples-to-oranges, no
+confound. Data capture is identical either way (every run already logs evals + `solution_quality`),
+so **zero extra runs** — no anytime-search or re-solve machinery needed.
+
+(**Board-symmetry pruning is dropped** as a headline technique — rotation/reflection symmetry is
+rare in real Sokoban maps, so it fires almost never and yields ~1.0 null ratios. Kept only as an
+optional stretch if a deliberately-symmetric map sub-suite is ever built.)
 
 ## Validation bar (all choices)
 Primary check = **pure-Python `validator.py`**: replay the emitted push sequence, assert all crates
-land on goals. Correctness only, NOT node counts. Optimality of `w=1` is self-validated (admissible
-`h` + `g>stored`), so `Q*` needs no external oracle. If the Java oracle is ever built, it checks
+land on goals (validity), NOT node counts. **Optimality is load-bearing** (it anchors both the
+scalar ratio and the Pareto optimal-quality line, D8) and is **NOT** established by "admissible `h` +
+`g>stored`" alone — that argues the *algorithm* is optimal, not that the *implementation* is (the
+`g>stored` vs `g≥stored` bug, D5, yields valid-but-suboptimal results the crates==goals check passes
+blind). So `validator.py` also runs a **small-map optimality oracle**: brute-force uniform-cost BFS
+over the push graph, assert `w=1` `Q*` equals BFS optimal on the small fixtures. This is what makes
+"drop the Java oracle" *correct*, not merely cheaper — and it's strictly stronger than the greedy
+(non-optimal) Java solver for checking `Q*`. If a Java oracle is ever built, it checks
 **solution validity / solvability agreement only**, never counts — even a faithful port wouldn't
 match Java counts (`int`-cast ties; Java `PriorityQueue` vs Python `heapq` tie-breaking). Do not
 chase count parity as a bug.
@@ -159,12 +195,15 @@ built, it invokes the Java **solver**, not that file. Do NOT import/copy that fi
 2. `state.py` (push successors, normalization, canonical key).
 3. `heuristic.py` (Manhattan sum) + `solver.py` (weighted A* + closed-list TT, `g>stored` predicate).
 4. `metrics.py` + `emit.py` (CSV per D6).
-5. `validator.py` (pure-Python replay: crates==goals) + `tests/` → validate every solve. (Java oracle deferred, optional.)
-6. `cli.py` flags. THEN Phase-2 techniques: symmetry pruning + weight sweep.
+5. `validator.py` (replay: crates==goals; + small-map UCS optimality oracle asserting `w=1`==BFS `Q*`) + `tests/` → validate every solve. (Java oracle deferred, optional.)
+6. `cli.py` flags. THEN Phase-2 experiments: Hungarian `h` (optimality-preserving arm) + weight sweep (Pareto arm).
 Fallback if wk1 slips: keep Java, wrap for CSV emit — metric is language-agnostic, comparison
 still holds.
 
 ## Open (not blocking port; Phase 2 / other owners)
-- Map suite composition (size-graded, count) — CJ + Enzo, for scaling curves.
-- Symmetry-pruning detailed design (rotation/reflection + checkerboard parity) — Phase 2.
+- Map suite composition (crate-count-graded, count) — CJ + Enzo, for scaling curves; **sized to
+  Manhattan's reach** so `w=1` reaches optimal under *both* `h` on every suite map (baseline-anchor
+  + heuristic-strength arm, D2/D8). Hungarian rescue = contingency, not a sizing target.
 - Roan's HP engine choice (B&B / NMCS / Metropolis) — 48h fuse, does not block this.
+- (Dropped) Board-symmetry pruning — optional stretch only; build a symmetric-map sub-suite first
+  if ever revived (D8).
