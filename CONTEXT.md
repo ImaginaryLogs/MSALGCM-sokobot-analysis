@@ -1,0 +1,14 @@
+# Context — Glossary
+
+Ubiquitous language for the Sokoban ↔ HP-Lattice comparative study. Glossary only — no implementation details.
+
+- **Systematic search** — complete, tree-structured exploration with node expansion and pruning (IDA*, Branch-and-Bound, NMCS). Produces a branching factor.
+- **Stochastic sampling** — Metropolis Monte Carlo: perturbs a *complete* configuration and accepts/rejects. No search tree, no branching factor. Distinct paradigm from systematic search; conflating the two is the project's central modeling hazard.
+- **Candidate-state evaluation** — the paradigm-neutral unit of work: a node expanded (systematic) or a sample drawn (stochastic). The shared primary metric. Sokoban logs BOTH `nodes_expanded` and `candidates_scored`; which one is the cross-domain join key is PROVISIONAL, pending the HP engine choice (Metropolis 1-eval/proposal ↔ `candidates_scored`; NMCS nested playout / B&B expansions ↔ `nodes_expanded`).
+- **Efficiency ratio** — baseline evaluations ÷ optimized evaluations at **equal quality**. Only defensible as a scalar for **optimality-preserving** techniques (both arms reach optimal). For **quality-trading** techniques (weighted search) report an effort-vs-quality **Pareto curve** instead — a first-valid-solution scalar there would fold a quality gap into the ratio.
+- **Heuristic weight tuning** — raising `w` in `f=g+w·h` to trade solution quality for fewer evaluations. Committed headline technique (weighted/Pareto arm). Sokoban-side knob, NOT a cross-domain "transferable technique" — `w` is A*-specific; the transferable thing is the effort *metric*.
+- **Heuristic strength** — a tighter admissible `h` (Manhattan → Hungarian min-cost matching) cuts evaluations while preserving optimality (both at `w=1`). Committed headline technique (optimality-preserving / scalar-ratio arm). Replaces symmetry pruning.
+- **Symmetry pruning** — discarding states equivalent under board rotation/reflection and checkerboard parity. **DROPPED as headline** (board symmetry rare in real maps → ~null ratios); optional stretch only.
+- **Macro-graph tunnel abstraction** — Botea-style decomposition of the board into rooms + tunnels for macro-level planning. Stretch technique; weakest cross-domain transfer.
+- **Transfer (equivalence) claim** — currently *Level 2, local isomorphism*: the two search graphs differ globally but share deadlock/parity substructure. Weak transfer is an acceptable finding, not a failure.
+- **Solution validator** — pure-Python check that a solver's push sequence actually solves the map (crates==goals), plus a small-map uniform-cost-BFS **optimality oracle** asserting `w=1`==optimal `Q*`. Replaces the Java reference oracle on the wk1 critical path (Java solver is greedy/non-optimal, so weaker for checking `Q*`; kept optional/deferred for solvability cross-checks only, never node counts).
