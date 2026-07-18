@@ -29,7 +29,8 @@ Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (pres
   - [ ] _Dropped:_ symmetry pruning — board symmetry rare → ~null ratios; optional stretch only.
   - [ ] _Stretch:_ macro-graph tunnel abstraction (Botea) — only if ahead; weakest transfer.
 - [x] Test sets: Sokoban map suite (CJ) — 155 maps sourced from `CSINTSY-sokobot2024/maps/` (originals + 1-in-10 sample of `sokoban-info/`'s 2716 XSokoban maps), filtered by w=1 Manhattan solvability (`scripts/build_map_suite.py`, D2 baseline-anchor rule); crate counts 1-11+; 152 excluded/logged in `src/sokoban/maps/EXCLUDED.md` · ~100 generated proteins (Roan/Enzo, still open).
-- [x] Batch runner (CJ) — `scripts/run_experiments.py`: Arm A (manhattan vs hungarian, w=1) + Arm B (manhattan, weight grid) in-process, one shared D6 CSV. Eval budget `N=2,000,000` locked from full-suite sweep. Design: `docs/DECISIONS.md` #9. Smoke-tested; full 155-map run not yet executed.
+- [x] Batch runner (CJ) — `scripts/run_experiments.py`: Arm A (manhattan vs hungarian, w=1) + Arm B (manhattan, weight grid) in-process, one shared D6 CSV. Eval budget `N=2,000,000` locked from full-suite sweep. Design: `docs/DECISIONS.md` #9.
+- [x] Full Phase-2 data run (CJ) — 155 maps x 7 configs = 1085 rows in `results/results.csv`. 1084 solved, 1 eval-budget cutoff. Not yet analyzed.
 - [ ] Paper skeleton + Methods + related-work drafted early (Enzo) — writable before results exist.
 
 ## Phase 3: Data (wk3, Jul 31–Aug 7)

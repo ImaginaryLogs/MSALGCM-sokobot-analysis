@@ -38,9 +38,11 @@ solver is greedy best-first (non-optimal); do NOT faithfully port its algorithm.
   maps) and filtered by `scripts/build_map_suite.py` (w=1 Manhattan proves optimal, D2
   baseline-anchor rule). 152 excluded, logged in `src/sokoban/maps/EXCLUDED.md`.
 
-## Phase-2 experiments — ready to run
+## Phase-2 experiments — data collected, analysis next
 
-Both headline arms are code-ready. `scripts/run_experiments.py` runs Arm A (heuristic strength)
-+ Arm B (weight tuning) in one pass over the full suite, one shared D6 CSV. Eval budget, weight
-grid, and arm design: [`docs/DECISIONS.md`](docs/DECISIONS.md) #9. Not yet executed at full
-scale — smoke-tested only.
+Both headline arms ran full scale: `scripts/run_experiments.py` over all 155 suite maps x 7
+configs (Arm A: manhattan vs hungarian @ w=1; Arm B: manhattan @ weight grid), 1085 rows in
+`results/results.csv` (gitignored — regenerate via `uv run python scripts/run_experiments.py`).
+1084 solved, 1 eval-budget cutoff. Eval budget, weight grid, and arm design:
+[`docs/DECISIONS.md`](docs/DECISIONS.md) #9. Next: analysis notebook (Phase 3) — efficiency
+ratios for Arm A, Pareto curves for Arm B.
