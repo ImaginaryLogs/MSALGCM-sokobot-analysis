@@ -8,7 +8,7 @@ algorithm.
 ## Factual correction (supersedes HANDOFF)
 
 - `project-specs.md` does **NOT** cite IDA* or Korf — it is the generic course rubric.
-  The IDA* requirement traces only to `tasks.md` (self-imposed) + CJ's Korf lit-review paper.
+  The IDA* requirement traces only to `STATUS.md` (self-imposed) + CJ's Korf lit-review paper.
   It was revisable, and we revised it (see D1).
 - The Java solver is **greedy best-first**, NOT A\*: `SokoStateComparator` sorts purely by
   `SokoState.getCost` = product of 3 weighted **non-admissible** heuristics (`moveCount` folded
@@ -28,7 +28,7 @@ just weighted A* with IDA* cosmetics, so we name it honestly. Keeps a tunable `w
 genuinely transferable thing is the **effort metric** `candidate_states_evaluated` (D6), the
 paradigm-neutral join key — not any single algorithmic knob. WA* is a complete systematic search
 (matches CONTEXT.md glossary, pairs cleanly vs Roan's B&B). `w=1` = admissible optimal baseline;
-`w>1` = bounded-suboptimal tuned runs. tasks.md's "IDA*" was self-imposed; the Korf citation still
+`w>1` = bounded-suboptimal tuned runs. STATUS.md's "IDA*" was self-imposed; the Korf citation still
 backs the weighted-search / bounded-suboptimal story. `algorithm` CSV value = `wastar` (was
 `widastar`).
 
@@ -86,11 +86,10 @@ bit-packing with a plain Python tuple hash. Memory is O(distinct states) by desi
 - `candidates_scored` — every successor you call `heuristic()` on, **including ones later dropped by
   closed list or deadlock prune** (NOT pops-only).
 
-**Which one is the cross-domain join key is PROVISIONAL** — it depends on Roan's unchosen HP engine
-(D6 unsigned): a Metropolis proposal = 1 energy eval (lines up with `candidates_scored`); an NMCS
-sample = a nested playout = _many_ evals; B&B = node expansions (lines up with `nodes_expanded`).
-Capturing both now means no re-run whichever way Roan lands. Populate `candidate_states_evaluated`
-(D6) from whichever counter the signed schema selects; default `candidates_scored` pending sign-off.
+**Join key locked: `nodes_expanded`** (2026-07-18, [DECISIONS.md](../DECISIONS.md) #8). Roan
+confirmed B&B ([ADR 0002](../adr/0002-hp-engine-bnb.md)) — B&B node expansions map to
+`nodes_expanded`. `candidates_scored` remains logged (cheap, infra above) as a secondary counter,
+not the join key. `candidate_states_evaluated` (D6) now defaults to `nodes_expanded`.
 
 ### D6 — Shared CSV schema (DRAFT — needs Enzo harness sign-off + Roan HP confirm)
 
@@ -107,7 +106,7 @@ One row per run. NA where a column doesn't apply.
 | `weight_w`                       | tuning param (NA for stochastic)                                                                                                                                                                                                                                                                                                                        |
 | `base_h`                         | `manhattan`\|`hungarian` — the optimality-preserving arm (both at `w=1`); replaces dropped `symmetry_pruning`                                                                                                                                                                                                                                           |
 | `seed`                           | RNG seed (NA/fixed for systematic)                                                                                                                                                                                                                                                                                                                      |
-| **`candidate_states_evaluated`** | **PRIMARY (join key PROVISIONAL — pending Roan/D6 sign-off)** — populated from whichever Sokoban counter the signed schema picks; default `candidates_scored`. See D5: log BOTH `nodes_expanded` and `candidates_scored`, because HP engine choice (Metropolis 1-eval/proposal vs NMCS nested playout vs B&B expansions) determines which is comparable |
+| **`candidate_states_evaluated`** | **PRIMARY (join key LOCKED to `nodes_expanded`, 2026-07-18)** — B&B confirmed ([ADR 0002](../adr/0002-hp-engine-bnb.md)); B&B expansions ↔ `nodes_expanded`. `candidates_scored` still logged (D5) as secondary, not the join key |
 | `nodes_expanded`                 | Sokoban: states popped+closed (raw, always logged)                                                                                                                                                                                                                                                                                                      |
 | `candidates_scored`              | Sokoban: every successor scored by `heuristic()`, incl. closed/deadlock-pruned (raw, always logged)                                                                                                                                                                                                                                                     |
 | `solved`                         | `1` solved / `0` proven unsolvable (open list emptied) / `cutoff` (stopped early) — or reached-E for HP                                                                                                                                                                                                                                                 |
@@ -217,9 +216,10 @@ built, it invokes the Java **solver**, not that file. Do NOT import/copy that fi
 
 ## Open (not blocking port; Phase 2 / other owners)
 
-- Map suite composition (crate-count-graded, count) — CJ + Enzo, for scaling curves; **sized to
-  Manhattan's reach** so `w=1` reaches optimal under _both_ `h` on every suite map (baseline-anchor
-  - heuristic-strength arm, D2/D8). Hungarian rescue = contingency, not a sizing target.
-- Roan's HP engine choice (B&B / NMCS / Metropolis) — 48h fuse, does not block this.
+- Map suite composition (crate-count-graded, count) — CJ, sourced from `CSINTSY-sokobot2024/maps/`
+  filtered by w=1 Manhattan solvability under the real eval budget (baseline-anchor rule, D2/D8);
+  excluded/censored maps logged, not silently dropped.
 - (Dropped) Board-symmetry pruning — optional stretch only; build a symmetric-map sub-suite first
   if ever revived (D8).
+
+**Resolved:** Roan's HP engine choice → B&B, see [ADR 0002](../adr/0002-hp-engine-bnb.md).

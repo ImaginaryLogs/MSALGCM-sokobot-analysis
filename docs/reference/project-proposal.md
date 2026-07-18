@@ -8,7 +8,10 @@
 
 ## **Main Question**
 
-_How can state-space symmetry pruning, macro-graph tunnel abstraction precomputing, and heuristic weight tuning reduce the effective branching factor of PSPACE-complete pathfinding problems, and to what extent do these algorithmic shortcuts transfer from Sokoban to HP-Lattice Protein Folding?_
+_How can heuristic strength (tighter admissible heuristics), macro-graph tunnel abstraction precomputing, and heuristic weight tuning reduce the effective branching factor of PSPACE-complete pathfinding problems, and to what extent do these algorithmic shortcuts transfer from Sokoban to HP-Lattice Protein Folding?_
+
+_(Revised 2026-07-18: state-space symmetry pruning replaced by heuristic strength — board symmetry
+is rare in real Sokoban maps and yields near-null ratios; see [DECISIONS.md](../DECISIONS.md) #2.)_
 
 | Supporting Question                                                      |                                                                                                                                                                                                        |
 | ------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
