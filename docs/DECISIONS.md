@@ -39,6 +39,32 @@ links out to those and keeps a one-line summary.
    `candidate_states_evaluated` (D6 schema) now populates from `nodes_expanded` by default.
    `candidates_scored` still logged (cheap, D5) as a secondary counter, not the join key.
 
+9. **Phase-2 experiment plan locked** (grill session, full record in git history of
+   `docs/plans/sokoban-phase2-experiments-plan.md`, deleted on resolution per docs-management
+   rule):
+   - **Map suite fixed: 155 maps, not 19.** `build_map_suite.py` only ever scanned
+     `maps/_all/` — `CSINTSY-sokobot2024/maps/sokoban-info/` (2716 classic XSokoban-format maps,
+     loader-compatible) was never fed in. Sampled every 10th file (272 candidates) into `_all/`,
+     reran the D2 filter (timeout raised 300s→60s per-map for the rerun's practicality) → 155
+     suite-eligible maps, crate counts 1–11+. `EXCLUDED.md` regenerated (152 excluded).
+   - **D6 CSV schema still DRAFT** (pending Enzo sign-off) — running real data against it anyway;
+     Sokoban side is deterministic so a re-run is cheap if columns shift.
+   - **Eval budget locked: `N=2,000,000`** (candidate_states_evaluated / `nodes_expanded` join
+     key). Set from a full-155-map sweep at `w=1` manhattan: observed max `candidates_scored`
+     was 975,695 — `N` is ~2x headroom above that, not the old untested `1,000,000` CLI default.
+   - **Arm A (heuristic strength):** manhattan vs hungarian, `w=1` fixed, scalar ratio (D8) —
+     code-ready, no design left.
+   - **Arm B (weight tuning):** manhattan **only** (no cross with hungarian — keeps the two arms
+     independent variables; a hungarian×weight cross is optional stretch). Weight grid:
+     `{1.0, 1.25, 1.5, 2.0, 3.0, 5.0}`, dense near 1.0 where quality degrades fastest. Revisit
+     grid after CJ's Korf/Junghanns lit-review annotations if their bounded-suboptimal values
+     suggest otherwise.
+   - **Batch runner:** `scripts/run_experiments.py` — in-process (no subprocess-per-cell),
+     imports `solver.py`/`emit.py` directly, one shared CSV. `cli.py` stays the single-run/debug
+     entry point. The `(manhattan, w=1.0)` cell is shared by both arms and only run once.
+     Smoke-tested on 2 maps × 7 configs (2026-07-18) — dedup and weight/heuristic behavior
+     verified correct; full 155-map run not yet executed (separate data-collection step).
+
 ## Deferred
 
 (none)

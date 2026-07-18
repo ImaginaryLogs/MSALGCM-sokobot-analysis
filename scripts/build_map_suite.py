@@ -26,7 +26,7 @@ from sokoban.validator import ValidationError, assert_optimal  # noqa: E402
 MAPS_DIR = ROOT / "src" / "sokoban" / "maps"
 SOURCE_DIR = MAPS_DIR / "_all"
 EVAL_BUDGET = 1_000_000
-TIMEOUT_S = 300.0
+TIMEOUT_S = 60.0
 
 # Small-map UCS oracle (validator.py) is O(full state space) -- only run it
 # below this crate count, matching D7's "small-map" scoping. Larger maps that

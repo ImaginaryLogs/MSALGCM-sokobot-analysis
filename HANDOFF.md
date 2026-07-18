@@ -33,6 +33,14 @@ solver is greedy best-first (non-optimal); do NOT faithfully port its algorithm.
 - **CSV schema D6** — DRAFT, needs Enzo (harness) sign-off. Join key **resolved**: `nodes_expanded`
   (Roan confirmed B&B, [ADR 0002](docs/adr/0002-hp-engine-bnb.md)). Log both counters so no re-run
   is needed.
-- **Map suite** (CJ) — done. 29 maps in `src/sokoban/maps/`, sourced from
-  `CSINTSY-sokobot2024/maps/` and filtered by `scripts/build_map_suite.py` (w=1 Manhattan proves
-  optimal, D2 baseline-anchor rule). 6 excluded, logged in `src/sokoban/maps/EXCLUDED.md`.
+- **Map suite** (CJ) — done. 155 maps in `src/sokoban/maps/`, sourced from
+  `CSINTSY-sokobot2024/maps/` (originals + a 1-in-10 sample of `sokoban-info/`'s 2716 XSokoban
+  maps) and filtered by `scripts/build_map_suite.py` (w=1 Manhattan proves optimal, D2
+  baseline-anchor rule). 152 excluded, logged in `src/sokoban/maps/EXCLUDED.md`.
+
+## Phase-2 experiments — ready to run
+
+Both headline arms are code-ready. `scripts/run_experiments.py` runs Arm A (heuristic strength)
++ Arm B (weight tuning) in one pass over the full suite, one shared D6 CSV. Eval budget, weight
+grid, and arm design: [`docs/DECISIONS.md`](docs/DECISIONS.md) #9. Not yet executed at full
+scale — smoke-tested only.
