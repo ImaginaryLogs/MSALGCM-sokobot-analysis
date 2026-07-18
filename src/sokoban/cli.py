@@ -1,8 +1,4 @@
-"""CLI: run one or many maps through the weighted A* solver, emit D6 CSV rows.
-
---base-h hungarian is accepted (Phase-2 build, D2) but not yet implemented --
-fails fast rather than silently falling back to Manhattan.
-"""
+"""CLI: run one or many maps through the weighted A* solver, emit D6 CSV rows."""
 from __future__ import annotations
 
 import argparse
@@ -10,19 +6,17 @@ import sys
 from pathlib import Path
 
 from .emit import write_row
-from .heuristic import manhattan
+from .heuristic import hungarian, manhattan
 from .loader import load_map
 from .metrics import build_row
 from .solver import solve
 from .state import make_state
 from .validator import ValidationError, assert_optimal, replay
 
-_HEURISTICS = {"manhattan": manhattan}
+_HEURISTICS = {"manhattan": manhattan, "hungarian": hungarian}
 
 
 def _resolve_heuristic(name: str):
-    if name == "hungarian":
-        raise NotImplementedError("hungarian heuristic is a Phase-2 build (D2), not yet implemented")
     return _HEURISTICS[name]
 
 
