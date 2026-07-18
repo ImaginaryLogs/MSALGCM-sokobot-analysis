@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sokoban.deadlock import compute_dead_squares
 from sokoban.emit import write_row
+from sokoban.heuristic import hungarian, manhattan
 from sokoban.loader import load_map
 from sokoban.metrics import build_row
 from sokoban.solver import solve
@@ -93,6 +94,29 @@ class SolverTests(unittest.TestCase):
         start = make_state(board, crates, player)
         result = solve(board, start, w=1.0, eval_budget=10_000, timeout_s=5.0)
         self.assertGreater(result.candidates_scored, 0)
+
+
+class HungarianHeuristicTests(unittest.TestCase):
+    def test_at_least_as_tight_as_manhattan(self):
+        # Hungarian forbids two crates claiming the same goal, so it's never a
+        # looser bound than per-crate nearest-goal (D2).
+        board, crates, _player = load_map(FIXTURES / "two_crates.txt")
+        self.assertGreaterEqual(hungarian(board, crates), manhattan(board, crates))
+
+    def test_stays_admissible_never_exceeds_optimal(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        optimal = optimal_push_count(board, start)
+        self.assertIsNotNone(optimal)
+        self.assertLessEqual(hungarian(board, crates), optimal)
+
+    def test_solves_optimally_same_as_manhattan(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, heuristic=hungarian, eval_budget=100_000, timeout_s=10.0)
+        self.assertEqual(result.solved, "solved")
+        assert_optimal(board, start, result.solution_quality)  # raises on mismatch
+        replay(board, start, result.push_sequence)  # raises on mismatch
 
 
 class EmitTests(unittest.TestCase):
