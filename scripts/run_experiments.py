@@ -47,7 +47,7 @@ def _configs() -> list[tuple[str, float]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=ROOT / "results.csv")
+    parser.add_argument("--out", type=Path, default=ROOT / "results" / "results.csv")
     parser.add_argument("--eval-budget", type=int, default=DEFAULT_EVAL_BUDGET, dest="eval_budget")
     parser.add_argument("--timeout", type=float, default=TIMEOUT_S)
     parser.add_argument("--git-sha", default=None, dest="git_sha")

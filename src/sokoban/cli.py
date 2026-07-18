@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=300.0,
                          help="wall-clock safety cutoff in seconds (hang-safety only, never primary -- D6)")
     parser.add_argument("--seed", type=int, default=None, help="RNG seed (NA for deterministic wastar)")
-    parser.add_argument("--out", type=Path, default=Path("results.csv"), help="CSV output path (D6 schema)")
+    parser.add_argument("--out", type=Path, default=Path("results/results.csv"), help="CSV output path (D6 schema)")
     parser.add_argument("--validate", action="store_true",
                          help="run validator.py replay, plus the small-map optimality oracle when --w=1")
     parser.add_argument("--git-sha", default=None, dest="git_sha")
