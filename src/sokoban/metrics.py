@@ -1,9 +1,9 @@
 """D6 CSV schema: build one shared-schema row per run from a solve result.
 
-`candidate_states_evaluated` is the cross-domain join key (PROVISIONAL, D5/D6)
--- defaults to `candidates_scored` pending Roan's HP-engine sign-off. Both raw
-Sokoban counters are always logged alongside it so no re-run is needed if the
-signed schema ends up picking `nodes_expanded` instead.
+`candidate_states_evaluated` is the cross-domain join key -- locked to
+`nodes_expanded` (2026-07-18, ADR 0002: Roan confirmed B&B, whose node
+expansions match Sokoban's `nodes_expanded`). Both raw Sokoban counters are
+always logged alongside it regardless.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def build_row(
     seed: int | None = None,
     quality_target: int | float | None = None,
     git_sha: str | None = None,
-    join_key_counter: str = "candidates_scored",
+    join_key_counter: str = "nodes_expanded",
 ) -> dict:
     """Assemble one D6 row. `join_key_counter` picks which raw counter feeds
     `candidate_states_evaluated` -- must be "nodes_expanded" or "candidates_scored"."""
