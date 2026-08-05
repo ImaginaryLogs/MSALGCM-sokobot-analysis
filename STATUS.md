@@ -14,9 +14,9 @@ Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (pres
 - [ ] HP Lattice — **Roan**
   - [x] Main Driver / Game Engine (existing Metropolis MC)
   - [x] **ENGINE DECISION:** B&B chain-growth confirmed 2026-07-18. See [ADR 0002](docs/adr/0002-hp-engine-bnb.md).
-  - [ ] Build chosen solver; reuse `geometry.py`/`validation.py`/lattice utils regardless.
+  - [x] Build chosen solver; reuse `geometry.py`/`validation.py`/lattice utils regardless. `src/protein-fold/bnb.py`, see [DECISIONS.md](docs/DECISIONS.md) 2026-08-03 entry.
   - [ ] Finish `equivalence.md` Layer 6.
-  - [ ] Eval instrumentation → CSV (same schema as Sokoban).
+  - [x] Eval instrumentation → CSV (same schema as Sokoban). `src/protein-fold/bnb_cli.py` (shares `sokoban.metrics.CSV_COLUMNS`).
 - [ ] Shared harness — **Enzo**
   - [ ] CSV schema (see Measurement below). Adapt CSINTSY `tester.py` + `analyzer.ipynb`, don't build from zero.
   - [ ] Lit Review doc (due Jul 24) — see split below.
@@ -26,6 +26,9 @@ Dates: Lit Review due **Jul 24** (present Jul 27) · Final Paper **Aug 7** (pres
 - [ ] Commit techniques (each with ablation flag):
   - [ ] **Heuristic weight tuning** (CJ Sokoban / Roan HP) — `w>1`, quality-trading → **Pareto curve** (no scalar ratio).
   - [x] **Heuristic strength** (CJ) — Manhattan vs **Hungarian** `h` @ `w=1`, optimality-preserving → **scalar efficiency ratio**. Replaces symmetry pruning. `hungarian()` via scipy `linear_sum_assignment`, same signature as `manhattan()`. Implemented, tested.
+  - [x] **Heuristic strength (HP)** — `bound="weak"` (static structural capacity) vs `bound="tight"`
+    (real-time free-slot tracking, default) in `src/protein-fold/bnb.py`, same optimality-preserving
+    scalar-ratio shape as Sokoban's. See [DECISIONS.md](docs/DECISIONS.md) #13.
   - [ ] _Dropped:_ symmetry pruning — board symmetry rare → ~null ratios; optional stretch only.
   - [ ] _Stretch:_ macro-graph tunnel abstraction (Botea) — only if ahead; weakest transfer.
 - [x] Test sets: Sokoban map suite (CJ) — 155 maps sourced from `CSINTSY-sokobot2024/maps/` (originals + 1-in-10 sample of `sokoban-info/`'s 2716 XSokoban maps), filtered by w=1 Manhattan solvability (`scripts/build_map_suite.py`, D2 baseline-anchor rule); crate counts 1-11+; 152 excluded/logged in `src/sokoban/maps/EXCLUDED.md` · ~100 generated proteins (Roan/Enzo, still open).

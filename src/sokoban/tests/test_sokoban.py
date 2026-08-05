@@ -119,6 +119,40 @@ class HungarianHeuristicTests(unittest.TestCase):
         replay(board, start, result.push_sequence)  # raises on mismatch
 
 
+class TraceTests(unittest.TestCase):
+    def test_off_by_default(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=100_000, timeout_s=10.0)
+        self.assertIsNone(result.trace_rows)
+
+    def test_produces_one_row_per_expanded_node_plus_pruned(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=100_000, timeout_s=10.0, trace=True)
+        self.assertIsNotNone(result.trace_rows)
+        expanded_or_goal = [r for r in result.trace_rows if r["status"] in ("expanded", "goal")]
+        self.assertEqual(len(expanded_or_goal), result.nodes_expanded)
+        self.assertEqual(sum(1 for r in result.trace_rows if r["status"] == "goal"), 1)
+        for row in result.trace_rows:
+            self.assertIn(row["status"], ("expanded", "goal", "pruned"))
+
+    def test_node_cap_enforced_without_truncating_the_search(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=100_000, timeout_s=10.0, trace=True, trace_node_cap=2)
+        self.assertEqual(result.solved, "solved")  # search itself is unaffected by the cap
+        self.assertLessEqual(len(result.trace_rows), 2)
+
+    def test_all_pruned_flags_a_fully_deadlocked_node(self):
+        # every successor from the start state pushes into a dead square
+        board, crates, player = load_map(FIXTURES / "unsolvable_walled.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=10_000, timeout_s=5.0, trace=True)
+        root_row = next(r for r in result.trace_rows if r["parent_id"] is None)
+        self.assertTrue(root_row["all_pruned"])
+
+
 class EmitTests(unittest.TestCase):
     def test_row_round_trips_through_csv(self):
         board, crates, player = load_map(FIXTURES / "solved_2push.txt")

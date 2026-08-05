@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -34,7 +35,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--validate", action="store_true",
                          help="run validator.py replay, plus the small-map optimality oracle when --w=1")
     parser.add_argument("--git-sha", default=None, dest="git_sha")
+    parser.add_argument("--trace", action="store_true",
+                         help="opt-in per-node trace (docs/equivalence/cross-domain-analysis-design.md S0); "
+                              "one CSV per map under --trace-dir, capped at --trace-node-cap rows")
+    parser.add_argument("--trace-node-cap", type=int, default=100_000, dest="trace_node_cap")
+    parser.add_argument("--trace-dir", type=Path, default=Path("results/traces"), dest="trace_dir")
     return parser
+
+
+def _write_trace_csv(path: Path, rows: list[dict]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -47,7 +63,13 @@ def run(args: argparse.Namespace) -> int:
             board, start,
             w=args.w, heuristic=heuristic,
             eval_budget=args.eval_budget, timeout_s=args.timeout,
+            trace=args.trace, trace_node_cap=args.trace_node_cap,
         )
+
+        if args.trace and result.trace_rows:
+            trace_path = args.trace_dir / f"{map_path.stem}_w{args.w}_{args.base_h}_trace.csv"
+            _write_trace_csv(trace_path, result.trace_rows)
+            print(f"  trace: {len(result.trace_rows)} rows -> {trace_path}")
 
         # replay runs on every solve (validation bar, not opt-in) -- cheap,
         # O(solution length), catches silent solver bugs. The UCS optimality
