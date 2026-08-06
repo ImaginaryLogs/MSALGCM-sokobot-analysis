@@ -14,13 +14,43 @@ search itself still runs to its normal stopping condition, only the trace
 stops accumulating. `node_id`/`parent_id` reuse each state's own `.key()`
 (already the canonical hash) rather than a separate id scheme.
 
-S3.1's PRUNED category is a near-free addition to this same loop, reusing a
-branch that already exists rather than adding a new call site: the existing
+S3.1's PRUNED category reuses a branch that already exists: the existing
 `board.is_dead(...)` deadlock check IS a domain-constraint rejection, exactly
-S3.1's PRUNED definition. Gives partial (not full) FRONTIER insight for
-free; true per-node FRONTIER (states generated but neither expanded nor
-pruned) would need a log call at generation regardless of outcome, which
-this does not add.
+S3.1's PRUNED definition.
+
+True per-node FRONTIER (states generated, not domain-pruned, pushed onto the
+open list) is logged too, at the one place a successor is accepted (D5's
+`heapq.heappush`). Sokoban's transposition (many push orders -> one crate
+config) means a generated successor can also be rejected for reasons that
+aren't a domain constraint at all -- it's redundant given search state already
+recorded elsewhere. Three such cases, each logged as `status="discarded"`
+with a distinct `discard_reason` rather than folded into one bucket or
+silently dropped (as they were before this was added), since they're
+different failure shapes with different diagnostic value:
+  - `"dominated_closed"`: the successor's target state is already closed
+    (expanded) via a path with lower-or-equal `g` (D5's `nk in closed and
+    new_g > closed[nk]` check) -- wasted work discovered eagerly, at
+    generation time.
+  - `"dominated_open"`: the target state already has an as-good-or-better
+    entry sitting in the open list (`nk in g_score and new_g >= g_score[nk]`)
+    -- also discovered eagerly, but the competing entry hasn't been expanded
+    yet, unlike `dominated_closed`.
+  - `"stale_pop"`: a heap entry for an already-closed (via a better-or-equal
+    path) state reaches the front of the queue and gets popped before being
+    discarded (the existing D5 skip at the top of the loop) -- the same
+    underlying redundancy as `dominated_closed`, just discovered lazily, at
+    pop time instead of generation time; the gap between the two is wasted
+    heap/memory churn, not wasted search work (the state is never
+    re-expanded either way).
+None of the three is a `board.is_dead` domain-constraint rejection, so none
+of them is logged as `"pruned"` -- that status stays reserved for genuine
+deadlock rejections, matching HP's `prune_reason` (`bound`/`connectivity`)
+staying reserved for HP's own domain/search-optimality rejections. Heap
+entries now carry their originating parent directly (5th tuple element)
+rather than looking it up via `came_from` at pop time, since by the time a
+stale entry is popped `came_from` may already point at the *winning* path,
+not the one this specific entry came from -- attributing a `stale_pop` row to
+the wrong parent would misdraw the induced graph for S1/S3.
 
 S1.3/S3.1's TRAP ("index-0 critical cell", live-checked per the doc's own
 suggestion as "successors' min f >= this node's f") is deliberately NOT
@@ -81,7 +111,10 @@ def solve(
     closed: dict = {}
     came_from: dict = {}
 
-    open_heap: list = [(w * heuristic(board, start.crates), 0, next(counter), start)]
+    # heap tuple: (f, g, tiebreak_counter, state, parent_key) -- parent_key
+    # travels with the entry itself so a stale pop can log the ancestor it
+    # actually came from, not whatever came_from[key] currently points at
+    open_heap: list = [(w * heuristic(board, start.crates), 0, next(counter), start, None)]
     nodes_expanded = 0
     candidates_scored = 0
     peak_frontier = 1
@@ -90,10 +123,19 @@ def solve(
         if time.monotonic() - t0 >= timeout_s:
             return _cutoff("clock", nodes_expanded, candidates_scored, peak_frontier, t0, trace_rows)
 
-        f, g, _, state = heapq.heappop(open_heap)
+        f, g, _, state, parent_key = heapq.heappop(open_heap)
         key = state.key()
 
         if key in closed and g > closed[key]:
+            if trace_rows is not None and len(trace_rows) < trace_node_cap:
+                trace_rows.append({
+                    "node_id": key, "parent_id": parent_key,
+                    "g": g, "h": ((f - g) / w) if w else None, "f": f, "depth": g,
+                    "n_legal_successors": None, "n_pruned": None,
+                    "status": "discarded",
+                    "all_pruned": None, "f_plateau": None, "discard_reason": "stale_pop",
+                    "timestamp_order": next(trace_seq),
+                })
             continue  # dominated stale heap entry (D5: strict g>stored)
         closed[key] = g
         nodes_expanded += 1
@@ -118,7 +160,7 @@ def solve(
                         "g": g + 1, "h": h, "f": g + 1 + w * h, "depth": g + 1,
                         "n_legal_successors": None, "n_pruned": None,
                         "status": "pruned",
-                        "all_pruned": None, "f_plateau": None,
+                        "all_pruned": None, "f_plateau": None, "discard_reason": None,
                         "timestamp_order": next(trace_seq),
                     })
                 continue  # deadlock-pruned (D4), already counted+scored above
@@ -130,11 +172,41 @@ def solve(
             nk = new_state.key()
             new_g = g + 1
             if nk in closed and new_g > closed[nk]:
+                if trace_rows is not None and len(trace_rows) < trace_node_cap:
+                    trace_rows.append({
+                        "node_id": nk, "parent_id": key,
+                        "g": new_g, "h": h, "f": succ_f, "depth": new_g,
+                        "n_legal_successors": None, "n_pruned": None,
+                        "status": "discarded",
+                        "all_pruned": None, "f_plateau": None, "discard_reason": "dominated_closed",
+                        "timestamp_order": next(trace_seq),
+                    })
                 continue  # dominated (D5)
             if nk not in g_score or new_g < g_score[nk]:
                 g_score[nk] = new_g
                 came_from[nk] = (key, push)
-                heapq.heappush(open_heap, (new_g + w * h, new_g, next(counter), new_state))
+                heapq.heappush(open_heap, (new_g + w * h, new_g, next(counter), new_state, key))
+                if trace_rows is not None and len(trace_rows) < trace_node_cap:
+                    trace_rows.append({
+                        "node_id": nk, "parent_id": key,
+                        "g": new_g, "h": h, "f": succ_f, "depth": new_g,
+                        "n_legal_successors": None, "n_pruned": None,
+                        "status": "frontier",
+                        "all_pruned": None, "f_plateau": None, "discard_reason": None,
+                        "timestamp_order": next(trace_seq),
+                    })
+            elif trace_rows is not None and len(trace_rows) < trace_node_cap:
+                # nk in g_score with new_g >= g_score[nk], and not caught by
+                # the dominated_closed branch above -- an as-good-or-better
+                # entry is already sitting in the open list, unexpanded
+                trace_rows.append({
+                    "node_id": nk, "parent_id": key,
+                    "g": new_g, "h": h, "f": succ_f, "depth": new_g,
+                    "n_legal_successors": None, "n_pruned": None,
+                    "status": "discarded",
+                    "all_pruned": None, "f_plateau": None, "discard_reason": "dominated_open",
+                    "timestamp_order": next(trace_seq),
+                })
 
         if trace_rows is not None and len(trace_rows) < trace_node_cap:
             all_pruned = (not goal) and len(succs) > 0 and n_pruned == len(succs)
@@ -145,7 +217,7 @@ def solve(
                 "g": g, "h": ((f - g) / w) if w else None, "f": f, "depth": g,
                 "n_legal_successors": len(succs), "n_pruned": n_pruned,
                 "status": "goal" if goal else "expanded",
-                "all_pruned": all_pruned, "f_plateau": f_plateau,
+                "all_pruned": all_pruned, "f_plateau": f_plateau, "discard_reason": None,
                 "timestamp_order": next(trace_seq),
             })
 

@@ -32,9 +32,25 @@ def disconnectivity_curve(rows: list[dict], n_thresholds: int = 20) -> list[tupl
     Returns (tau, n_components) -- a component-count *drop* as tau rises
     marks a merge event. This is the curve, not the full branching-tree
     diagram (which needs the merge history, i.e. which components merged and
-    when -- not built here)."""
-    by_id = {r["node_id"]: r for r in rows}
-    f_values = sorted({r["f"] for r in rows if r["f"] is not None})
+    when -- not built here).
+
+    Restricted to `expanded`/`goal` rows (mirrors `null_model.truncate_to_size`'s
+    notion of "visited"), not the full row set. A node_id can appear more than
+    once in `rows` -- Sokoban logs a `discarded` row every time a transposition
+    revisits an already-seen state via a worse path (docs/DECISIONS.md #12/#19).
+    Building `by_id` from every row let a later `discarded` revisit's *worse*
+    `f` silently overwrite that node's real, earlier `expanded` entry (plain
+    dict comprehension keeps whichever row comes last), which understated how
+    early nodes actually became reachable and inflated both `n_components` and
+    the AUC computed from the normalized curve by 1-2 orders of magnitude on
+    real traces -- caught by comparing this function's output against
+    `results.csv`'s own quality numbers on `original3` (2026-08-06). `pruned`/
+    `frontier` rows are excluded from the union-find set for the same reason
+    `truncate_to_size` excludes them: they were never actually visited by the
+    search, only generated or provisionally logged."""
+    visited = [r for r in rows if r["status"] in ("expanded", "goal")]
+    by_id = {r["node_id"]: r for r in visited}
+    f_values = sorted({r["f"] for r in visited if r["f"] is not None})
     if not f_values:
         return []
     lo, hi = f_values[0], f_values[-1]

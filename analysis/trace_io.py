@@ -45,8 +45,33 @@ def read_trace(path: Path) -> Iterator[dict]:
                 "n_pruned": _to_int(row["n_pruned"]),
                 "status": row["status"],
                 "all_pruned": _to_bool(row["all_pruned"]),
+                "discard_reason": row.get("discard_reason") or None,  # Sokoban-only column
                 "timestamp_order": _to_int(row["timestamp_order"]),
             }
+
+
+def instance_id_of(path: Path, domain: str) -> str:
+    """Reverses the trace filename back to the `instance_id` used as the
+    join key in `results/results.csv` -- mechanical, not a guess: mirrors
+    exactly how `src/sokoban/cli.py`/`src/protein-fold/bnb_cli.py` name the
+    file they write (`{instance_id}_w{w}_{base_h}_trace.csv` for Sokoban,
+    `{instance_id}_trace.csv` for HP), the same `instance_id` each CLI passes
+    to `emit.py` for the results-CSV row. Not a general-purpose parser --
+    `domain_of`'s caution about not trusting filename conventions is about
+    *inferring domain*; this only ever runs *after* domain is already known,
+    to undo a suffix this project's own code appended."""
+    stem = path.name
+    if not stem.endswith("_trace.csv"):
+        raise ValueError(f"{path}: doesn't end in _trace.csv")
+    stem = stem[: -len("_trace.csv")]
+    if domain == "sokoban":
+        import re
+
+        m = re.match(r"^(.*)_w[0-9.]+_[A-Za-z]+$", stem)
+        if not m:
+            raise ValueError(f"{path}: sokoban trace filename doesn't match _w<weight>_<base_h>")
+        return m.group(1)
+    return stem
 
 
 def domain_of(path: Path) -> str:

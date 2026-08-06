@@ -120,6 +120,20 @@ shortcut:
     all-successors-deadlocked case) or every candidate was bound-pruned (the
     search-optimality analog). Both collapse into one flag; which case fired
     is recoverable from `n_legal_successors == 0` on the same row.
+
+`status="frontier"` is logged for every candidate that survives the
+bound-prune (and connectivity-prune, if enabled), immediately before the
+recursive `dfs()` call that will expand it. Unlike Sokoban's FRONTIER (which
+can sit unexpanded for a long time while other, lower-f open-list entries get
+popped first -- and can be discarded outright without ever being expanded;
+see solver.py's `discard_reason`), HP's DFS has no open list: a frontier
+candidate here is expanded on the very next line, essentially always, so this
+status transitions to `expanded`/`goal` almost immediately and carries much
+less signal than Sokoban's -- logged for symmetry with the 5-object model and
+for S1/S3 graph reconstruction, not because it's expected to be informative
+on its own. No `discard_reason`-style dominance bucket exists here: chain
+growth has no transposition, so there is no "candidate whose target state is
+already accounted for elsewhere" case to distinguish.
 """
 from __future__ import annotations
 
@@ -422,6 +436,17 @@ def solve(
                         })
                         counters["trace_seq"] += 1
                     continue  # domain-constraint deadlock: not enough reachable free cells left
+
+            if trace_rows is not None and len(trace_rows) < trace_node_cap:
+                trace_rows.append({
+                    "node_id": node_id + (tuple(cand),), "parent_id": node_id,
+                    "g": new_g, "h": bound_val - new_g, "f": bound_val, "depth": new_idx,
+                    "n_legal_successors": None, "n_pruned": None,
+                    "status": "frontier", "all_pruned": None, "is_new_best": None,
+                    "prune_reason": None,
+                    "timestamp_order": counters["trace_seq"],
+                })
+                counters["trace_seq"] += 1
 
             fold.append(list(cand))
             pos_index[cand] = new_idx

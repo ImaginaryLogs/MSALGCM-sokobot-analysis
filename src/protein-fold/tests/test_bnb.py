@@ -206,11 +206,26 @@ class TraceTests(unittest.TestCase):
         visited = [r for r in result.trace_rows if r["status"] in ("expanded", "goal")]
         self.assertEqual(len(visited), result.nodes_expanded)
         statuses = {row["status"] for row in result.trace_rows}
-        self.assertLessEqual(statuses, {"expanded", "goal", "pruned"})
+        self.assertLessEqual(statuses, {"expanded", "goal", "pruned", "frontier"})
         self.assertGreaterEqual(sum(1 for r in result.trace_rows if r["status"] == "goal"), 1)
         self.assertGreaterEqual(sum(1 for r in result.trace_rows if r["status"] == "pruned"), 1)
         # incumbent improves at least once on the way to the proven optimum
         self.assertGreaterEqual(sum(1 for r in result.trace_rows if r["is_new_best"]), 1)
+
+    def test_frontier_row_precedes_every_visited_node(self):
+        # DFS has no open list -- a frontier candidate is expanded on the very
+        # next line, so (unlike Sokoban) this should hold as an exact
+        # invariant here, not just "usually": every expanded/goal node other
+        # than the two fixed starting monomers had a frontier row first, and
+        # no candidate that got a bound-pruned row also has a frontier row.
+        result = bnb.solve("HPHPPHHPH", trace=True)
+        frontier_ids = {r["node_id"] for r in result.trace_rows if r["status"] == "frontier"}
+        pruned_ids = {r["node_id"] for r in result.trace_rows if r["status"] == "pruned"}
+        self.assertTrue(frontier_ids)
+        self.assertEqual(frontier_ids & pruned_ids, set())
+        for row in result.trace_rows:
+            if row["status"] in ("expanded", "goal") and len(row["node_id"]) > 2:  # not the fixed 2-monomer start
+                self.assertIn(row["node_id"], frontier_ids)
 
     def test_node_cap_enforced_without_truncating_the_search(self):
         result = bnb.solve(

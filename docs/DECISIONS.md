@@ -318,6 +318,302 @@ links out to those and keeps a one-line summary.
 
 (none)
 
+## 2026-08-06
+
+18. **S1 null-model control built (`analysis/null_model.py`) and an Arm B x topology
+    extension added to `notebooks/cross_domain_analysis.ipynb`** -- both raised in
+    session discussion of whether the S1/S2/S3 domain comparison and the Arm A/B
+    technique comparison needed to be crossed, rather than staying two isolated
+    notebooks.
+    - **Null model**: `random_priority_search` -- a domain-generic best-first
+      search (i.i.d. uniform random priority, not `f=g+w*h`) that accepts every
+      domain-legal successor with no deadlock/bound filtering, since deciding
+      what to reject is itself part of what's under test, not a domain given.
+      `h` is still computed (real heuristic/bound, never used to guide) so `f`
+      stays comparable to the real trace. Fills the design doc's Section 1
+      closing "Null-model check" note, never built until now -- every S1 finding
+      up to this point (disconnectivity shape, `β1` bars, curvature, Mapper
+      fragmentation) was unfalsifiable against "that's just what a same-size
+      chunk of this domain's raw graph looks like", not necessarily attributable
+      to heuristic guidance or pruning.
+    - **Size-matched, not corpus-matched**: `truncate_to_size` takes the real
+      trace's first `NULL_TARGET=20_000` expanded/goal rows by
+      `timestamp_order`; the null search stops at the same count. Comparing
+      differently-sized graphs would confound "shape differs from guidance"
+      with "shape differs because one graph is bigger".
+    - Run on the same single largest-trace-file-per-domain already used for
+      S1.5's instance plot (`original3` Sokoban, downloaded CRAMBIN HP
+      sequence), one seed -- directional, not confirmatory, matching this
+      notebook's existing single-instance caveat.
+    - **Result: Sokoban's S1.1 disconnectivity AUC is ~1.0 for both real and
+      null -- expected, not a finding.** At `w=1`, Manhattan is consistent (one
+      push changes `h` by exactly ±1), which forces `f=g+h` non-decreasing along
+      every search-tree edge, so any `f<=tau` sublevel-set subgraph is
+      tree-connected by construction at every threshold, independent of
+      expansion order. **HP shows a real, non-degenerate gap on both AUC and
+      S1.5 mean curvature** -- HP's `f` has no such monotonicity guarantee
+      (`g` = accumulated contacts, `h` = a *shrinking* upper bound), so its
+      bound-guided expansion order visits a measurably more bottlenecked region
+      of the state space than a same-size random walk. The asymmetry itself is
+      informative: the null model is only structurally guaranteed to be vacuous
+      for Sokoban, not for HP.
+    - **Arm B x topology sweep** (3 instances with a full 6-point weight-grid
+      Pareto series already in `results.csv`, re-traced with `trace=True` per
+      weight): motivated directly by the Sokoban degeneracy above, since
+      consistency is `w=1`-only (`f=g+w*h` loses it for `w>1`, the same fact
+      already used to explain `f_plateau` becoming a real signal at `w>1`,
+      decision #11). **Confirmed empirically**: disconnectivity AUC jumps off
+      the 1.0 floor at `w=1.25` for all three instances, before any other
+      topology metric shows a clear pattern. **No single monotonic
+      "higher w = smoother topology" trend past that** -- `53-44`'s mean
+      curvature gets steadily more negative as `w` rises, tracking its own
+      non-monotonic node-count/quality jump at `w=2.0` (higher `w` finds a
+      *worse* solution *and* explores more nodes there); `2-11` and `52-13`
+      don't show that reversal. Three instances, reported as "topology-warping
+      is real and instance-dependent", not a population claim.
+    - Both additions are outside `docs/equivalence/cross-domain-analysis-design.md`'s
+      original S0-S3 scope -- extensions, not gap-filling against that doc.
+
+19. **`notebooks/cross_domain_analysis.ipynb` reorganized into S1/S2/S3 +
+    Extensions document order, and one real bug found and fixed while
+    rechecking it** (not just cosmetic -- flagged when asked to review the
+    notebook's organization).
+    - **Reorder**: sections previously appeared in *build* order (S2 and S1.3
+      first, since both reuse the one-streaming-pass aggregate and needed no
+      new deps; S1.1/S1.2/S1.4/S1.5 added later once `ripser`/`networkx`/
+      `GraphRicciCurvature` were installed), which read as S2 -> S1.3 ->
+      S1.1/1.2/1.4 -> S1.5 -> S3 -> connectivity-pruning -> null-model ->
+      weight-sweep -- internally consistent but not the order a reader
+      following "S1.1 through S1.5" would expect. Reordered to Setup -> S1
+      (1.1/1.2/1.3/1.4/1.5, in order) -> S2 -> S3 -> a new "Extensions beyond
+      the design doc's scope" umbrella (connectivity-pruning, S1 null-model
+      control, Arm B x topology sweep) -> closing. No cell content/logic
+      moved except heading levels (former top-level `##` section headers
+      that are now subsections under S1 or Extensions demoted to `###`) --
+      verified every reordered cell's data dependency (`agg_by_domain`,
+      `pop_data`, imports) only requires running after the shared Setup
+      cells, not after any specific S-numbered section, so the reorder is
+      execution-safe.
+    - **Real bug found**: the S3.2 KL-divergence cell asserted
+      `labels_a == labels_b` (Sokoban's and HP's transition-matrix label sets
+      match) -- true before #18 (both domains had exactly `{expanded, goal,
+      pruned}`), but Sokoban now also logs `discarded` (the
+      transposition-dominance cases, HP has no analog), so the label sets
+      diverge (5 vs 4) and the assert would crash the very next execution.
+      Fixed to compare over the shared-label intersection only, printing
+      which labels are domain-specific rather than either crashing or
+      silently comparing mismatched rows.
+    - **Also found and reverted**: a stray `assert labels_a[1:] == labels_b` /
+      `enumerate(labels_a[1:])` had appeared in that same cell's *source* at
+      some point this session without an identified cause (not present in
+      the pre-session backup, not something any known edit in this session's
+      history touched deliberately) -- would have silently misaligned matrix
+      rows against labels if it had ever executed (comparing `mat_a[i]` at
+      the *sliced* label's position against the *unsliced* `mat_b[i]`).
+      Replaced by the shared-label-intersection fix above rather than
+      restored, since the intersection version is correct for both the old
+      (matching labels) and new (diverging labels) cases. Flagged here as an
+      unresolved provenance question, not swept under the rug.
+    - **S3's status-vocabulary description updated** to match #18: FRONTIER
+      is now observed in both domains (was 3-of-5 doc objects, now 4-of-5),
+      DISCARDED is a Sokoban-only addition outside the doc's 5-object
+      vocabulary, and the "terminal/vacuous" note (previously just
+      goal/pruned) now covers frontier/pruned/discarded/goal -- only
+      `expanded` ever has real outgoing transitions.
+    - **Superseded**: the corpus finished regenerating (217 trace files, 158
+      sokoban/59 hp_lattice, `trace_node_cap=500_000`) and the notebook was
+      re-executed against it the same session -- the label-set fix above ran
+      for real (would have crashed on the old hard assert) and every number
+      in the notebook is now current. See #20 for what that re-execution
+      found.
+
+20. **HP's `frontier` row in the S3.1/S3.2 transition matrix is a
+    `trace_node_cap` artifact, not real search behavior -- found only by
+    actually rechecking #19's reorganized notebook against the fresh 500k-cap
+    corpus** (invisible on the smaller pre-#18 traces, where nothing hit the
+    cap deep enough to matter).
+    - **Mechanism**: `bnb.py`'s DFS logs a node's own `expanded`/`goal` row
+      *after* recursing into all its children (post-order) -- a node's
+      `frontier` row is written by its parent, before the recursive call that
+      will eventually overwrite it in any post-hoc `by_id` lookup. But
+      `trace_node_cap` stops row *logging* without stopping the *search*, so
+      once a trace hits the cap, any node already mid-recursion (frontier row
+      written, already recursed into, some children's rows already written)
+      never gets the overwriting `expanded`/`goal` row appended -- that
+      append was scheduled for *after* its subtree, exactly when the cap
+      silently swallowed it. Net effect: some fraction of nodes that were
+      genuinely fully expanded by the real search are stuck showing
+      `status=frontier` in the trace, and their already-logged children now
+      read as "frontier -> expanded/frontier/goal" transitions.
+    - **Sokoban's `frontier` row stays correctly all-zero** despite hitting
+      the same cap on plenty of files (19+): its solver logs a node's own row
+      immediately after popping it, strictly before any of its children are
+      even generated -- there's no "children logged, parent not yet" window
+      for the cap to land inside. The asymmetry is a genuine structural
+      consequence of iterative pop-then-log (Sokoban) vs recursive
+      post-order-log (HP), not a bug in either.
+    - **Confirmed structural, not incidental**: 22 of the 59 HP trace files
+      hit the cap exactly (`wc -l == 500001`), and the identical pattern
+      (0.30/0.68/0.01/0.00-ish) shows up independently in the
+      connectivity-pruning section's transition matrices too, on a completely
+      different 18-instance slice, nearly identically for both the
+      bound-only and bound+connectivity variants -- which also confirms it
+      isn't a connectivity-pruning effect.
+    - **Not fixed**: this is a real limitation of building `status` sets
+      post-hoc from a capped, per-node trace rather than the design doc's
+      proposed live `status_transitions` log (§3.1) -- fixing it properly
+      would mean logging a node's own status *before* recursing, then a
+      separate transition event when it's later confirmed goal/complete,
+      which is a bigger change than this session's scope. Documented in the
+      notebook (new cell after S3.2's KL output, plus a note on the
+      connectivity-pruning interpretation) so the numbers aren't
+      misread as a domain-structural finding about HP's search.
+
+21. **RQ6 (instance-specific correspondence, `docs/specs/METHODOLOGY_SYNTHESIS.md`) scoped out for
+    this data collection — checked both of its proposed paths directly rather than assuming either
+    was open.**
+    - **General multi-pair test: blocked, confirmed by reading the source doc.**
+      `docs/equivalence/sokoban_hp-latice_equivalence.md`'s Layer 5 mapping is a category-level
+      prose analogy (e.g. "Box Locations → Monomer Coordinates"), not a runnable
+      board-to-sequence (or sequence-to-board) construction; its Layer 6 is literally "To Be filled
+      later."
+    - **The single-pair shortcut the synthesis doc called "cheapest available step, requiring no
+      new formal work" (`original3`/CRAMBIN, reused from #18's null-model control) is also blocked
+      — by two independent, verified data problems, not by the missing mapping:**
+      1. Neither instance has a proven-optimal solve on both heuristic arms, so RQ4's
+         equal-quality ratio can't be computed. `results.csv`: `original3` has only one Sokoban run
+         (manhattan, `w=1`), `solved=cutoff`/`cutoff_reason=budget`/`solution_quality=NA` at the
+         2M-eval cap, no Hungarian run at all (same true of `original1`/`original2`). CRAMBIN has
+         both `tight` and `weak` bound runs, but both also hit the 2M-eval cap with
+         `solution_quality=8` as an unproven incumbent, not a certified optimum.
+      2. RQ1's taxonomy extension is real on the Sokoban side and empty on the HP side of this
+         specific pair. `original3`'s trace: 106,855/180,549 expanded-or-pruned nodes pruned =
+         **59.18%**, matching the ~59% population figure (#15) almost exactly — a genuine
+         instance-level confirmation. CRAMBIN's 500,000-row capped trace has **zero**
+         `status=pruned` rows. Checked whether this is CRAMBIN-specific: no — 3 of the other 20 HP
+         trace files that also hit `trace_node_cap` show zero pruned rows too, alongside others
+         showing anywhere from a handful to several thousand. Same root cause as #20's frontier-row
+         artifact: bound-pruning only becomes frequent once the B&B incumbent has tightened, and on
+         these instances that point falls past the 500,000-row capture window — not evidence HP
+         doesn't prune on chains this size (#15 already shows thousands of prune events at
+         comparable lengths), evidence this particular capped trace hasn't reached that region yet.
+    - **Resolution**: RQ6 stays out of scope for this data collection. RQ2–RQ5's population-level
+      findings are a proxy for equivalence, not a direct test of it — state that plainly wherever
+      they're reported. If RQ6 is reopened later, the fix is not the mapping construction: either
+      re-run `original3` with Hungarian to convergence and pick an HP instance/cap that actually
+      shows pruning, or choose a different matched pair both engines already solved to proven
+      optimality on both heuristic variants.
+
+22. **Real bug fixed in `analysis/topology_lite.py::disconnectivity_curve`: a
+    stale-revisit `f` value was silently corrupting Sokoban's S1.1
+    disconnectivity AUC by 1-2 orders of magnitude at population scale —
+    found while building Track D's RQ5 cross-reference figure
+    (`docs/specs/METHODOLOGY_SYNTHESIS.md`), not by any test.**
+    - **Mechanism**: `by_id = {r["node_id"]: r for r in rows}` kept whichever
+      trace row for a given state came *last* in the file. Sokoban logs a
+      `discarded` row every time a transposition revisits an already-expanded
+      state via a worse path (#12/#19) — that row carries the *same*
+      `node_id` but a *worse* (higher) `f` than the state's real, earlier
+      `expanded` entry. A plain dict comprehension let the later, worse
+      `discarded` row silently overwrite the real one, so many nodes'
+      `f`-value used for the threshold sweep was wrong — often high enough to
+      exclude that node from every low-tau bucket it should have belonged to,
+      inflating `n_components` and therefore the AUC computed by
+      `disconnectivity_curve_normalized`.
+    - **Why it stayed hidden**: the one place this number gets stated as a
+      finding — the S1 null-model control (#18, `original3`/CRAMBIN) — feeds
+      `null_model.truncate_to_size`-filtered rows (`status in
+      ("expanded","goal")` only) into the curve function, which incidentally
+      filters out every `discarded` row and sidesteps the bug entirely. That
+      cell's `1.0000` was always genuinely correct. The **population-level
+      S1.1 fan chart** (cells 7-9) hands the curve function *raw, unfiltered*
+      trace rows and has no printed numeric summary (plot only) — so nothing
+      surfaced the corruption until Track D's new combined-figure cell
+      printed raw `disc_auc` values of 97/58/34 for a `w=1` Sokoban instance
+      that should have been exactly `1.0`.
+    - **Fix**: `disconnectivity_curve` now restricts both `by_id` and the
+      threshold range's `f_values` to `status in ("expanded", "goal")` rows
+      only, mirroring `truncate_to_size`'s already-correct notion of
+      "visited." Verified on `original3`'s full trace and the `2-11` weight
+      sweep: AUC now reads exactly `1.0` at `w=1`, matching the algebraic
+      argument, before and after.
+    - **Population-level re-verification (28 valid Sokoban curves, same
+      `POP_SAMPLE_SIZE=30`/`POP_SEED=0` sample as cells 6-9)**: every single
+      one now reads AUC `1.0000` exactly — the "AUC=1.0 floor at `w=1`" claim
+      is now an exactly-verified population result, not an assumption resting
+      on one spot-checked instance. HP is unaffected by this bug (no
+      transpositions, so no `discarded` status to collide on) and keeps its
+      wide, expected population spread (0.61-3727, median ~11).
+    - **No other callers affected differently**: `scripts/analyze_traces.py`
+      is the only other caller of `disconnectivity_curve` and gets the same
+      fix automatically; its `*_disconnectivity.csv` outputs (already stale
+      and removed from `results/analysis/` this session) would need
+      regenerating if reused.
+    - Added a numeric confirmation cell (mean/median/min/max per domain)
+      directly after the S1.1 fan chart plot in `notebooks/cross_domain_analysis.ipynb`,
+      since the plot alone had no printed number for anyone to check against.
+
+## 2026-08-07
+
+23. **Track E (scaling-axis retrofit) built and verified against real data —
+    `docs/specs/METHODOLOGY_SYNTHESIS.md`'s "missing axis" section.**
+    - **Checklist items 1 and 3 were already satisfied, not new work**:
+      `results/results.csv`'s `instance_size` column has 0/136 `NA` HP rows
+      (range 3-46) — no emission fix needed; `notebooks/analysis.ipynb`
+      cells 3 and 7 already plot Arm A's ratio against `instance_size` on
+      the x-axis for both domains.
+    - **Item 2 (the actual new work)**: added `instance_id_of()`
+      (`analysis/trace_io.py`) to reverse a trace filename back to the
+      `instance_id` key `results.csv` already has `instance_size` for —
+      mechanical, mirrors `src/sokoban/cli.py`/`src/protein-fold/bnb_cli.py`'s
+      own file-naming, verified against all 217 real trace files (0 misses).
+      Added `size_of()`/`scatter_by_size()` helpers and one per-instance
+      scatter cell per S1/S2 metric to `notebooks/cross_domain_analysis.ipynb`
+      (disconnectivity AUC, β1 bar count, fragmentation ratio, mean
+      curvature, branching factor, feasibility ratio) — the last two needed
+      a new per-instance mean computed over `pop_by_domain`'s 30-instance
+      sample, since `agg_by_domain` only pools at node level across the
+      whole corpus. Notebook re-executed end-to-end (`.venv/bin/jupyter
+      nbconvert --execute`), 0 errors.
+    - **Findings, on the `POP_SAMPLE_SIZE=30`/`POP_SEED=0` sample (directional,
+      not a scaling law)**, correlations computed both as Pearson (linear) and
+      Spearman (rank, robust to outliers) against normalized instance size:
+      - Sokoban's disconnectivity AUC stays flat at exactly `1.0` across its
+        whole sampled size range, as expected from the `w=1` consistency
+        argument (#22). HP's AUC has a moderate positive rank correlation
+        with size (Spearman ρ=0.61 on n=27; Pearson r=0.10, weak — pulled
+        around by a few very-high-AUC outliers).
+      - HP's β1 bar count is **exactly 0 for all 30 sampled instances at every
+        chain length 3-36** — a domain-structural fact (chain-growth has no
+        transpositions to create the revisit-loops β1 is presumably
+        detecting), not a size effect. Sokoban's β1 has real variance (0-111
+        bars) but no clean size trend (Spearman ρ=-0.22).
+      - Neither domain's Mapper fragmentation ratio trends with size (Sokoban
+        ρ=0.40, HP ρ=-0.04, both weak).
+      - Sokoban's mean Forman curvature has a strong negative size trend
+        (Pearson r=-0.85, Spearman ρ=-0.84 — bigger instances' search graphs
+        get more tree-like/hyperbolic). HP's signal is weak and internally
+        inconsistent (Pearson r=-0.48 vs Spearman ρ=+0.23 — sign disagreement,
+        likely outlier-driven on n=30) — no confident trend.
+      - Sokoban's mean branching factor rises with size (Pearson r=0.69,
+        Spearman ρ=0.68 — structural, more simultaneously-pushable crates).
+        HP's stays pinned near its lattice ceiling (≤3) across the whole
+        3-36 chain-length range (Pearson/Spearman disagree in sign there too)
+        — no real size trend.
+      - Feasibility ratio is only weakly size-associated in both domains
+        (Sokoban ρ=0.21, HP ρ=0.21), with HP's mean (0.95) sitting well above
+        Sokoban's (0.82) at every size sampled — consistent with #22's
+        module-docstring point that HP's real filtering happens elsewhere
+        (silent self-avoidance at generation time), not in this ratio.
+    - **Read as a cross-domain asymmetry, not a single verdict**: Sokoban's
+      topology genuinely reshapes with instance size for curvature and
+      branching factor; HP's largely doesn't, with disconnectivity AUC as the
+      one metric where HP shows a real (if noisy) size trend. Every markdown
+      cell above the six new scatters was written as neutral, un-presumptive
+      placeholder text *before* the notebook was re-executed, then replaced
+      with the numbers above only after real output existed — avoiding the
+      same fabrication risk #19/#22 already had to correct for.
+
 ## Framing notes
 
 - Existing Metropolis MC code is on-topic (SA is a Category-D example), not dead weight.

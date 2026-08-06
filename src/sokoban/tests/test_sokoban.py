@@ -135,7 +135,40 @@ class TraceTests(unittest.TestCase):
         self.assertEqual(len(expanded_or_goal), result.nodes_expanded)
         self.assertEqual(sum(1 for r in result.trace_rows if r["status"] == "goal"), 1)
         for row in result.trace_rows:
-            self.assertIn(row["status"], ("expanded", "goal", "pruned"))
+            self.assertIn(row["status"], ("expanded", "goal", "pruned", "frontier", "discarded"))
+
+    def test_every_accepted_successor_gets_a_frontier_row(self):
+        # two_crates.txt has real transposition (multiple push orders reach
+        # the same crate config), so this also exercises dominated_closed/open
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=100_000, timeout_s=10.0, trace=True)
+        frontier_ids = {r["node_id"] for r in result.trace_rows if r["status"] == "frontier"}
+        self.assertTrue(frontier_ids)  # this fixture does generate some
+        # every expanded/goal node other than the root must have had a
+        # frontier row logged before it was ever popped
+        for row in result.trace_rows:
+            if row["status"] in ("expanded", "goal") and row["parent_id"] is not None:
+                self.assertIn(row["node_id"], frontier_ids)
+
+    def test_discard_reason_only_set_on_discarded_rows(self):
+        board, crates, player = load_map(FIXTURES / "two_crates.txt")
+        start = make_state(board, crates, player)
+        result = solve(board, start, w=1.0, eval_budget=100_000, timeout_s=10.0, trace=True)
+        discarded = [r for r in result.trace_rows if r["status"] == "discarded"]
+        self.assertTrue(discarded)  # this fixture's transposition guarantees at least one
+        for row in discarded:
+            self.assertIn(row["discard_reason"], ("dominated_closed", "dominated_open", "stale_pop"))
+        for row in result.trace_rows:
+            if row["status"] != "discarded":
+                self.assertIsNone(row["discard_reason"])
+        # dominated_closed/dominated_open are both common on tiny transposition-heavy
+        # fixtures; stale_pop needs a heap entry to survive un-popped past the point
+        # its state gets closed via a better path -- rare enough at w=1 with a
+        # consistent heuristic that it isn't forced here, only exercised at scale
+        # against the real corpus.
+        reasons_seen = {row["discard_reason"] for row in discarded}
+        self.assertTrue(reasons_seen & {"dominated_closed", "dominated_open"})
 
     def test_node_cap_enforced_without_truncating_the_search(self):
         board, crates, player = load_map(FIXTURES / "two_crates.txt")
