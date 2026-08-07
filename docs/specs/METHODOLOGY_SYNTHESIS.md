@@ -195,8 +195,13 @@ search-efficiency techniques and structural search-space properties generalize b
 HP-lattice protein folding — two domains conjectured to share combinatorial structure but
 differing in complexity class, constraint semantics, and search paradigm?
 
-That question splits into six sub-questions. Each has a home in existing work; the table below is
-a map, not a summary — read the methodology section that follows for the actual content of each.
+That question splits into six sub-questions, plus two more (RQ7/RQ8) added this session, pulled
+directly from `docs/reference/project-proposal.md`'s supporting-question table ("Assumptions" and
+"Scalability" rows) rather than the primary question's own six-way split — they'd gone unanswered
+by the RQ1-6 topology framework, which characterizes each domain's structure and each technique's
+efficiency ratio separately but never joins the two, and never touches `peak_frontier`/`wall_clock_ms`
+scaling at all. Each row has a home in existing work; the table below is a map, not a summary — read
+the methodology section that follows for the actual content of each.
 
 | # | Sub-question | Where it's answered | Status |
 |---|---|---|---|
@@ -206,6 +211,8 @@ a map, not a summary — read the methodology section that follows for the actua
 | RQ4 | Does tightening the heuristic/bound yield comparable efficiency gains, and what mediates the magnitude of the gain? | `analysis.ipynb`, Arm A | Built; synthesis rewritten, HP outlier table and exclusion count added (Track C, `DECISIONS.md` #24) |
 | RQ5 | Does weight-relaxation (trading optimality for speed) generalize as a paradigm, or is it specific to A*-style search? | `analysis.ipynb` Arm B + `cross_domain_analysis.ipynb` weight-sweep extension | Built in two places; not yet cross-referenced into one finding |
 | RQ6 | Do RQ2–RQ5's population-level findings hold for a specific proposed instance correspondence, rather than just in aggregate? | Single-pair shortcut: `25-30_Sokoban-Microban-30` / `hp_len11_0_seed42` (see below). Multi-pair: not built | Single-pair shortcut now computed with real numbers (`DECISIONS.md` #25) after `original3`/CRAMBIN turned out to be unconverged/artifact-affected. General multi-pair correspondence stays out of scope — the equivalence doc's mapping still isn't a runnable construction |
+| RQ7 | What structural features of the search-expansion graph predict how much a pruning/weight-tuning technique actually saves, per instance? | `scripts/analyze_structural_pruning.py` (standalone script, not in either notebook) | Built this session (`DECISIONS.md` #26) |
+| RQ8 | How do memory footprint and execution time scale with grid dimension and object count, and does pruning/weight-tuning change the scaling exponent? | `scripts/analyze_scaling.py` (standalone script, not in either notebook) | Built this session (`DECISIONS.md` #26) |
 
 ---
 
@@ -394,6 +401,84 @@ direct test of it, and that limitation should be stated plainly wherever those f
 reported rather than left implicit — this single matched pair is one additional, real data point
 alongside the population findings, not a replacement for them.
 
+**RQ7 — structural predictors of pruning/weight-tuning payoff.** New this session, answered by
+`scripts/analyze_structural_pruning.py` — a standalone script, not a notebook cell, since it joins
+two things nothing else already joins: `results.csv`'s per-instance efficiency ratios and
+trace-derived structural features. This is a different question from RQ4/RQ5's "does the ratio
+transfer": RQ4/RQ5 ask whether the *magnitude* of the pruning payoff is comparable across domains;
+RQ7 asks what *predicts* that payoff within a domain. Per-instance Arm A ratio
+(manhattan/hungarian, Sokoban; weak/tight, HP) and Arm B ratio (w=1/w=5, Sokoban only, the same
+weight-grid endpoints RQ5 uses) were correlated (Pearson + Spearman, Spearman as the primary read
+since n is modest and a couple of large-map outliers can dominate a Pearson r) against five
+structural features computed from each instance's baseline trace: branching factor, feasibility
+ratio, trap rate, disconnectivity AUC, and mean Forman curvature — the same feature set RQ2's
+population comparison and Track E's size-axis retrofit already compute, just correlated against a
+different y-axis (pruning payoff instead of instance size).
+
+Findings are domain-split and not expected to agree — RQ1's decoupled-vs-fused taxonomy already
+predicts why. **Sokoban's strongest predictor of pruning payoff is graph shape, not fragmentation**:
+mean curvature (Spearman ρ=-0.61 Arm A, n=155; ρ=-0.38 Arm B, n=154 — more negative/tree-like
+graphs benefit more) and branching factor (ρ=+0.49 / +0.41 — more simultaneously-legal moves give
+pruning more room to matter) dominate both arms. Disconnectivity AUC, despite being RQ2's headline
+topology metric, barely correlates with either arm's payoff (ρ=0.18, n=144 / ρ=0.11, n=143) — a
+metric can be the right tool for "do the domains look similar" (RQ2) and the wrong tool for "what
+predicts this technique's payoff" (RQ7) at the same time. **HP's strongest predictor is trap rate**
+(ρ=+0.75, n=46 — the largest correlation coefficient found in either domain for this question),
+consistent with RQ1's fused bound-prune/heuristic mechanism: where dead ends are dense is exactly
+where tightening the bound helps most. Branching factor and curvature — Sokoban's top two — are
+noise-level for HP (both p>0.2). Sokoban's Arm B (w=1→w=5) median solution-quality cost on this
+sample is ~0% more pushes — on this sample, the correlated weight-tuning gain isn't purchased with
+a measurable quality loss at the median, though CONTEXT.md's quality-trading framing for this arm
+still applies in general (it's an equal-quality arm only by coincidence on this sample, not by
+construction the way Arm A is).
+
+**Caveat**: n is capped by trace availability, not `results.csv`'s full instance count — 155/158
+Sokoban Arm A pairs, 154/158 Arm B pairs, 46/59 HP Arm A pairs (the same 13-instance exclusion
+RQ4/`DECISIONS.md` #24 already documents — the 4 longest synthetic chains plus all 5 real PDB
+proteins, none reaching an equal-quality solve on both bounds). Full correlation table:
+`results/analysis/structural_pruning_correlations.csv`.
+
+**RQ8 — memory/time scaling vs. grid dimension and object count.** New this session, answered by
+`scripts/analyze_scaling.py`. Distinct from "The missing axis" section below: that section replots
+*topology* metrics (curvature, disconnectivity AUC, branching factor, …) against instance size;
+RQ8 instead fits log-log power laws (`y = a·x^b`) for the two *cost* metrics STATUS.md's
+Measurement section names as the memory/time proxies — `peak_frontier` and `wall_clock_ms` —
+against `grid_cells` (Sokoban board area) and `instance_size` (crate count / chain length),
+separately per technique config, so the fitted exponent `b` is directly comparable across baseline
+vs. optimized runs — a technique that "reduces exploration time as scale grows" should show up as
+a smaller `b`, not just a lower intercept.
+
+Sokoban (n=155 instances per config, deduped — see data-integrity note below): both cost metrics
+scale super-linearly, and crate count matters more than board area (partial regression isolating
+each axis: `peak_frontier ~ grid_cells^2.56 · instance_size^3.96`, `wall_clock_ms ~
+grid_cells^3.37 · instance_size^4.18`, both at baseline w=1 manhattan). Pruning/weight-tuning
+monotonically **flattens every exponent** rather than only shifting the intercept:
+`wall_clock_ms` vs. `instance_size` goes 4.65 (baseline) → 3.93 (hungarian, w=1) → 3.71 (manhattan,
+w=5); vs. `grid_cells`, 4.13 → 3.87 → 3.57. That's a direct, quantitative answer to "does
+state-pruning/weight-tuning reduce exploration time as scale grows": yes, and it does so by
+reducing the growth-rate exponent itself, not merely applying a constant-factor speedup at every
+size.
+
+HP-lattice has no grid axis — the search is over an unbounded lattice, not a fixed board
+(`src/protein-fold/bnb_cli.py` sets `grid_cells="NA"` for every HP row, `DECISIONS.md` #10).
+`peak_frontier ~ instance_size^1.00` with R²=1.000 exactly, under both bounds (n=46 each) — the
+B&B engine's frontier is deterministically equal to chain length, a genuinely different, degenerate
+scaling shape from Sokoban's priority-queue-dependent frontier, worth stating as a domain-structural
+fact rather than a numerical coincidence. `wall_clock_ms` scales far steeper than Sokoban's (b≈7.07
+weak, 7.35 tight) and heuristic strength barely moves the exponent — consistent with RQ4's already
+small HP effect size.
+
+**Data-integrity fix, applies beyond RQ8.** While building this, found `results/results.csv`
+contains duplicate re-run rows for ~155/158 Sokoban baseline instances — repeated
+`scripts/run_experiments.py` invocations appended to the same CSV, the same pattern
+`scripts/analyze_arms.py`'s `arm_b_pareto` already documents and dedupes for. Undeduped, this
+silently inflates any naive `len(rows)`-based sample-size count ~2x for nearly the whole Sokoban
+corpus without biasing a fitted slope (the duplicate rows sit on/near the same point — confirmed by
+comparing fits before/after the fix, exponents changed by <0.02 across the board).
+`scripts/analyze_scaling.py` dedupes to last-row-per-instance before fitting; any future script
+reading `results.csv` directly for per-instance analysis should do the same rather than assume one
+row per instance. Full fit table: `results/analysis/scaling_fits.csv`.
+
 ---
 
 ## The missing axis: scaling by instance size
@@ -577,3 +662,21 @@ noted.
       for equivalence, not a direct test of it, per the resolution above. Added as a shared note
       immediately before the RQ2 section (applies to RQ2–RQ5 collectively, rather than repeating the
       same sentence four times).
+
+**Track G — RQ7/RQ8 added (done this session, `DECISIONS.md` #26)**
+- [x] Confirm neither of `docs/reference/project-proposal.md`'s "Assumptions"/"Scalability"
+      supporting questions was already answered anywhere in `docs/` or `notebooks/`. Checked by
+      grepping for their key phrases ("structural feature", "movable object", "grid dimension")
+      across both — no hits outside the proposal table itself.
+- [x] Build `scripts/analyze_structural_pruning.py` (RQ7): joins Arm A/B per-instance efficiency
+      ratios from `results.csv` against structural features computed from each instance's baseline
+      trace via the existing `analysis/` modules (`shared_characteristics.py`, `topology_lite.py`,
+      `curvature.py` — no new feature-computation code written, only new correlation/join code).
+      Findings above; correlation table at `results/analysis/structural_pruning_correlations.csv`.
+- [x] Build `scripts/analyze_scaling.py` (RQ8): log-log power-law fits of `peak_frontier` /
+      `wall_clock_ms` against `grid_cells` / `instance_size`, per technique config. Findings above;
+      fit table at `results/analysis/scaling_fits.csv`.
+- [x] Found and fixed a real data-integrity issue while building RQ8: duplicate re-run rows for
+      ~155/158 Sokoban instances in `results.csv`, silently inflating naive sample-size counts.
+      Deduped in `analyze_scaling.py`; `analyze_arms.py`'s Arm B already had the same fix, `analyze_
+      structural_pruning.py`'s dict-keyed joins were already immune (last-row-wins by construction).

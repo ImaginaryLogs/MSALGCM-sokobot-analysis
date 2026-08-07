@@ -698,6 +698,53 @@ links out to those and keeps a one-line summary.
       finding is a population/aggregate proxy for equivalence, not a direct test of
       it, rather than leaving that caveat implicit or only inside RQ6's own section.
 
+26. **RQ7/RQ8 added to `docs/specs/METHODOLOGY_SYNTHESIS.md` (Track G) — `docs/reference/project-proposal.md`'s
+    "Assumptions" and "Scalability" supporting questions, unaddressed by the RQ1-6 topology
+    framework, answered by two new standalone scripts:
+    `scripts/analyze_structural_pruning.py` and `scripts/analyze_scaling.py`.**
+    - **Why these were gaps**: the RQ1-6 framework characterizes each domain's topology (RQ2/RQ3)
+      and each technique's efficiency-ratio magnitude (RQ4/RQ5) separately, but nothing joins a
+      per-instance structural feature against a per-instance pruning payoff, and nothing touches
+      `peak_frontier`/`wall_clock_ms` scaling at all — confirmed by grepping `docs/` and
+      `notebooks/*.ipynb` for the proposal questions' key phrases before starting, no hits outside
+      the proposal table itself.
+    - **RQ7 (`scripts/analyze_structural_pruning.py`)**: joins Arm A ratio (manhattan/hungarian
+      Sokoban, weak/tight HP) and Arm B ratio (w=1/w=5, Sokoban only) against five structural
+      features computed from each instance's baseline trace (branching factor, feasibility ratio,
+      trap rate, disconnectivity AUC, mean Forman curvature — reusing `analysis/shared_
+      characteristics.py`/`topology_lite.py`/`curvature.py`, no new feature-computation code).
+      **Sokoban's strongest predictors are mean curvature (Spearman ρ=-0.61 Arm A, n=155; ρ=-0.38
+      Arm B, n=154) and branching factor (ρ=+0.49 / +0.41)** — disconnectivity AUC, RQ2's headline
+      topology metric, barely correlates with either arm's payoff (ρ=0.18, n=144 / ρ=0.11, n=143).
+      **HP's strongest predictor is trap rate (ρ=+0.75, n=46)** — the largest correlation found for
+      this question in either domain — consistent with RQ1's fused bound-prune/heuristic mechanism;
+      branching factor and curvature are noise-level for HP (both p>0.2). Sokoban's Arm B median
+      quality cost on this sample is ~0% more pushes. n is capped by trace availability, not
+      `results.csv`'s full instance count (155/154/46 of 158/158/59) — the same 13-instance HP
+      exclusion #24 already documents. Full table: `results/analysis/structural_pruning_correlations.csv`.
+    - **RQ8 (`scripts/analyze_scaling.py`)**: log-log power-law fits (`y = a·x^b`) of `peak_frontier`
+      and `wall_clock_ms` against `grid_cells` and `instance_size`, per technique config, plus a
+      partial (two-predictor) regression isolating each axis. Sokoban baseline (w=1 manhattan,
+      n=155): `peak_frontier ~ grid_cells^2.56 · instance_size^3.96`, `wall_clock_ms ~
+      grid_cells^3.37 · instance_size^4.18` — crate count matters more than board area. **Pruning
+      monotonically flattens every exponent**: `wall_clock_ms` vs. `instance_size` goes 4.65
+      (baseline) → 3.93 (hungarian, w=1) → 3.71 (manhattan, w=5); vs. `grid_cells`, 4.13 → 3.87 →
+      3.57 — a technique "reducing exploration time at scale" shows up here as a smaller exponent,
+      not just a lower intercept. HP has no grid axis (`grid_cells="NA"`, unbounded lattice, #10);
+      `peak_frontier ~ instance_size^1.00` with R²=1.000 exactly under both bounds — B&B's frontier
+      is deterministically equal to chain length, a degenerate scaling shape unlike Sokoban's
+      priority-queue-dependent frontier. `wall_clock_ms` scales far steeper (b≈7.07-7.35) and barely
+      moves between bounds, consistent with RQ4's small HP effect size. Full table:
+      `results/analysis/scaling_fits.csv`.
+    - **Data-integrity fix, applies beyond RQ8**: found `results/results.csv` has duplicate re-run
+      rows for ~155/158 Sokoban baseline instances (repeated `scripts/run_experiments.py`
+      invocations appended to the same CSV) — the same pattern `scripts/analyze_arms.py`'s
+      `arm_b_pareto` already dedupes for, but `analyze_scaling.py`'s original `select()` didn't,
+      silently reporting `n=310` instead of `n=155` in an early run. Doesn't bias a fitted slope
+      (duplicates sit on/near the same point — fits changed by <0.02 before/after the fix) but
+      does inflate reported sample size ~2x. Fixed by deduping to last-row-per-instance;
+      `analyze_structural_pruning.py`'s dict-keyed joins were already immune by construction.
+
 ## Framing notes
 
 - Existing Metropolis MC code is on-topic (SA is a Category-D example), not dead weight.
