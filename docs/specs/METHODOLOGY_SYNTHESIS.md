@@ -201,9 +201,9 @@ a map, not a summary — read the methodology section that follows for the actua
 | # | Sub-question | Where it's answered | Status |
 |---|---|---|---|
 | RQ1 | Do the two domains encode "illegal state" through comparable mechanisms? | Synthesized from `DECISIONS.md` #1, #12, #15, #19, #22 | Built — narrative section plus a rejection-type × pipeline-stage × domain taxonomy table; found Sokoban has two independent rejection mechanisms (deadlock + transposition) to HP's effectively one, not covered by the original narrative alone |
-| RQ2 | Does the reachable-state topology look structurally similar, and is any similarity attributable to guidance rather than raw graph size? | `cross_domain_analysis.ipynb`, S1 + null model | Built; needs reordering (null model stated as a prerequisite, not a late addition) and a size axis (see below) |
+| RQ2 | Does the reachable-state topology look structurally similar, and is any similarity attributable to guidance rather than raw graph size? | `cross_domain_analysis.ipynb`, S1 + null model | Built; needs reordering (null model stated as a prerequisite, not a late addition). Size axis done (Track E, `DECISIONS.md` #23) |
 | RQ3 | Do local node-level behaviors and step-to-step transition dynamics look similar? | `cross_domain_analysis.ipynb`, S2/S3 | Built; one open item (frontier-row KL) needs verification before final citation |
-| RQ4 | Does tightening the heuristic/bound yield comparable efficiency gains, and what mediates the magnitude of the gain? | `analysis.ipynb`, Arm A | Built; synthesis undersells the finding — see below — and needs a size axis and an HP outlier table |
+| RQ4 | Does tightening the heuristic/bound yield comparable efficiency gains, and what mediates the magnitude of the gain? | `analysis.ipynb`, Arm A | Built; synthesis rewritten, HP outlier table and exclusion count added (Track C, `DECISIONS.md` #24) |
 | RQ5 | Does weight-relaxation (trading optimality for speed) generalize as a paradigm, or is it specific to A*-style search? | `analysis.ipynb` Arm B + `cross_domain_analysis.ipynb` weight-sweep extension | Built in two places; not yet cross-referenced into one finding |
 | RQ6 | Do RQ2–RQ5's population-level findings hold for a specific proposed instance correspondence, rather than just in aggregate? | Not built | Scoped out for this data collection — verified below, both the general multi-pair test and the single cheapest-pair shortcut are currently blocked, for two independent, checked reasons, not just the missing mapping construction |
 
@@ -266,10 +266,12 @@ transpositions in chain-growth), and its population AUC spread is wide (0.61-372
 which is itself now a more trustworthy number than before. The Mapper-graph fragmentation gap
 (roughly 230x more nodes needed for HP to reach comparable cluster counts) and the
 persistent-homology β1 gap (Sokoban has real transposition loops; HP has none at tested scale) both
-point the same direction from independent angles. What's missing here is a size axis — see the
-dedicated section below — since every one of these numbers is currently reported as a population
-aggregate (30 sampled instances per domain, pooled) with no way to tell whether the metric changes
-systematically with instance size or just varies by instance difficulty at roughly constant shape.
+point the same direction from independent angles. Each of these numbers now also has a size axis
+(Track E, `DECISIONS.md` #23) — see the dedicated section below — which turned out to matter:
+Sokoban's curvature and branching factor both show real size trends within the sampled range, while
+HP's largely don't (its one exception being disconnectivity AUC), so "pooled but roughly
+constant-shape" was true for some of these metrics and false for others, not a single answer across
+the board.
 
 **RQ3 — local dynamics and transitions.** Also largely built. The status transition matrix and its
 KL divergence and eigenspectrum are the right tools for "does step-to-step search behavior look
@@ -284,24 +286,33 @@ divergence computed against that same frontier row (currently printed as an exac
 vacuous rows like `goal` and `pruned` are correctly labeled N/A) should be traced through the code
 to confirm it isn't silently treating a zero-observation row as a valid distribution.
 
-**RQ4 — heuristic-strength transfer.** Built, but the existing synthesis undersells its own
-result. Sokoban's manhattan-versus-Hungarian ratio (155 of 155 eligible instances solved to equal
-optimal quality, mean 1.899, median 1.086, max 18.098) and HP's weak-versus-tight bound ratio (46
-instances, mean 1.103, median 1.022, max 1.567) are currently summarized as "comparable order of
-magnitude," which is true of the medians but obscures a real and mechanistically explainable
-asymmetry in the tails: Sokoban's mean is nearly double HP's, and its largest outlier is more than
-eleven times HP's largest outlier. RQ1's finding explains why directly — in Sokoban a better
-heuristic compounds with an independently-operating deadlock detector on contention-heavy maps,
-producing genuine double-digit gains; in HP the bound already does double duty as both the
-heuristic and the de facto deadlock filter, capping how much headroom a weak-to-tight switch can
-expose. The correct framing is not "heuristic strength transfers at a comparable magnitude" but
-"the *direction* of the effect transfers reliably; the *magnitude* is domain-structural, governed
-by whether deadlock detection is coupled to the heuristic or independent of it." Two additions
-would firm this up further and are both cheap: an HP outlier table mirroring the existing Sokoban
-top-10 (to check whether HP's largest ratios correlate with chain length or hydrophobic density the
-way Sokoban's correlate with goal contention), and a stated denominator for HP's 46-instance sample
-(what fraction of attempted instances were excluded from the equal-quality comparison, and why,
-mirroring the reassurance Sokoban's clean 155-of-155 already provides implicitly).
+**RQ4 — heuristic-strength transfer.** Built, and now fully verified rather than resting on a
+plausibility argument (Track C, `DECISIONS.md` #24). Sokoban's manhattan-versus-Hungarian ratio
+(155 of 155 eligible instances solved to equal optimal quality, mean 1.899, median 1.086, max
+18.098) and HP's weak-versus-tight bound ratio (46 of 59 attempted instances, mean 1.103, median
+1.022, max 1.567) were previously summarized as "comparable order of magnitude," which is true of
+the medians but obscures a real and mechanistically explainable asymmetry in the tails: Sokoban's
+mean is nearly double HP's, and its largest outlier is more than eleven times HP's largest outlier.
+RQ1's finding explains why directly — in Sokoban a better heuristic compounds with an
+independently-operating deadlock detector on contention-heavy maps, producing genuine double-digit
+gains; in HP the bound already does double duty as both the heuristic and the de facto deadlock
+filter, capping how much headroom a weak-to-tight switch can expose. The correct framing, now
+stated directly in `analysis.ipynb` rather than left implicit here, is not "heuristic strength
+transfers at a comparable magnitude" but "the *direction* of the effect transfers reliably; the
+*magnitude* is domain-structural, governed by whether deadlock detection is coupled to the
+heuristic or independent of it."
+
+The two cheap additions this section previously flagged are both done, with real numbers rather
+than a hypothesis: **HP's largest ratios correlate with chain length (Spearman ρ=0.76, Pearson
+r=0.61), not hydrophobic density (ρ=-0.36, r=-0.23)** — unlike Sokoban's tail, which reads as a
+contention effect, HP's reads as "the tight bound's advantage compounds over a longer chain,"
+regardless of how H-rich it is. And **HP's denominator is 46/59 (78%), not a clean 100% the way
+Sokoban's is**: of 59 attempted HP instances (54 synthetic + 5 real PDB proteins), all had both
+bounds run, but 13 hit `eval_budget` on *both* bounds before solving, so no ratio could be computed
+— those 13 are the 4 longest synthetic chains plus **all 5 real proteins in the dataset**. RQ4's
+46-instance result is therefore a synthetic-sequence-dominated finding; none of the real proteins
+this study tracks (CRAMBIN, TC5b, VILLIN, both insulin chains) are validated by it, since none of
+them reach an equal-quality solve on both bounds under the current `eval_budget`.
 
 **RQ5 — weight-relaxation transfer.** Two pieces of existing work answer this from different
 angles and have not yet been placed next to each other. `analysis.ipynb`'s Arm B section reports
@@ -457,16 +468,26 @@ noted.
       still inherit whatever uncertainty `#20`'s frontier-row content artifact carries, since
       `eigen_spectrum` runs over the full matrix regardless of how the KL cell labels that row.
 
-**Track C — RQ4 additions (depends on Track A's taxonomy for the interpretive framing, but the computation itself can start immediately)**
-- [ ] Build an HP top-10 outlier table mirroring the existing Sokoban table (same
+**Track C — RQ4 additions (done this session, `DECISIONS.md` #24)**
+- [x] Build an HP top-10 outlier table mirroring the existing Sokoban table (same
       `sorted(...)[:10]` pattern applied to `hp_ratios`), and check whether HP's largest ratios
-      correlate with chain length or hydrophobic density.
-- [ ] Determine and state HP's Arm A exclusion count: how many attempted HP instances did not reach
+      correlate with chain length or hydrophobic density. Added to `analysis.ipynb`, joined against
+      each instance's H/P sequence (synthetic FASTA files read directly; the 5 real PDB proteins
+      converted via `utils.convert_to_hp`, mirroring `bnb_cli.py`'s own `to_hp_sequence` fallback).
+      **Correlates with chain length (Spearman ρ=0.76, Pearson r=0.61), not hydrophobic density**
+      (ρ=-0.36, r=-0.23, density range 0.0-0.90 on the 46-instance sample) — the opposite of
+      Sokoban's contention-driven tail.
+- [x] Determine and state HP's Arm A exclusion count: how many attempted HP instances did not reach
       equal-quality solves under both bounds, and why, alongside the existing clean 155-of-155
-      Sokoban figure.
-- [ ] Rewrite the Arm A synthesis paragraph to state the mean/median/max numbers explicitly and
+      Sokoban figure. **46/59 (78%)** — all 59 attempted instances had both `weak` and `tight` rows
+      present, but 13 hit `eval_budget` cutoff on *both* bounds before solving: the 4 longest
+      synthetic chains (length 17-20) plus **all 5 real PDB proteins** (`1CRN`/CRAMBIN, `1L2Y`,
+      `1VII`, both `4INS` chains). No partial-arm cases (never "only weak" or "only tight" run).
+- [x] Rewrite the Arm A synthesis paragraph to state the mean/median/max numbers explicitly and
       frame the asymmetry via RQ1's coupled-versus-decoupled deadlock-detection mechanism, replacing
-      the current "comparable order of magnitude" framing.
+      the current "comparable order of magnitude" framing. Rewrote both `analysis.ipynb`'s
+      "Does heuristic strength transfer?" cell and its final Summary cell; re-executed end-to-end,
+      0 errors, output numbers match the standalone verification above exactly.
 
 **Track D — RQ5 cross-reference (done this session)**
 - [x] Built the combined figure (`2-11`, `52-13`, `53-44`, shared `w`-axis, cost top / shape

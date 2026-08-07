@@ -614,6 +614,53 @@ links out to those and keeps a one-line summary.
       with the numbers above only after real output existed — avoiding the
       same fabrication risk #19/#22 already had to correct for.
 
+24. **Track C (RQ4 additions) built and verified against real data —
+    `docs/specs/METHODOLOGY_SYNTHESIS.md`'s RQ4 section, `notebooks/analysis.ipynb`.**
+    - **HP outlier table**: added an H/P-sequence join to `analysis.ipynb` so
+      each of `hp_ratios`' 46 instances gets a `hp_density` (fraction of `H`
+      residues) alongside its existing `instance_size`. The 54 synthetic
+      instances read straight from `data/synthetic_hp_seed{42,67,420}.fasta`
+      (already H/P letters); the 5 real PDB proteins are converted via
+      `utils.convert_to_hp` after reproducing `bnb_cli.py`'s own label
+      transform (`re.sub(r"[^A-Za-z0-9_.-]+", "_", header)[:60]`) to match
+      `results.csv`'s `instance_id` exactly. **Finding: HP's largest ratios
+      correlate with chain length (Spearman ρ=0.76, Pearson r=0.61), not
+      hydrophobic density (ρ=-0.36, r=-0.23)** — the opposite structural story
+      from Sokoban's outliers, which read as goal-contention-driven. HP's
+      tail looks like "the tight bound's advantage compounds over a longer
+      chain," independent of H-richness.
+    - **HP's Arm A exclusion count**: of 59 distinct attempted HP instances
+      (54 synthetic + 5 real PDB proteins), all 59 had both `weak` and
+      `tight` base_h rows present — no partial-arm gaps — but only **46/59
+      (78%)** reached equal-quality solves under both bounds. The other 13
+      were excluded for one single, consistent reason: `cutoff_reason=budget`
+      on *both* bounds, never just one. Those 13 are the 4 longest synthetic
+      chains (length 17-20) plus **all 5 real PDB proteins in the dataset**
+      (`1CRN`/CRAMBIN, `1L2Y`/TC5b, `1VII`/VILLIN, both `4INS` insulin
+      chains) — every real protein this study tracks falls outside the
+      eligible RQ4 sample entirely, unlike Sokoban's clean 155/155. This is a
+      real scope caveat for RQ4, not a rounding footnote: the ratio result is
+      synthetic-sequence-dominated.
+    - **Synthesis rewrite**: `analysis.ipynb`'s "Does heuristic strength
+      transfer?" cell and its Summary cell now state the mean/median/max
+      numbers explicitly (Sokoban 155/155: mean 1.899, median 1.086, max
+      18.098; HP 46/59: mean 1.103, median 1.022, max 1.567) and frame the
+      tail asymmetry via RQ1's coupled-vs-decoupled deadlock-detection
+      mechanism (#1/#12/#15/#19) instead of "comparable order of magnitude" —
+      matching the framing this design doc already argued for in its RQ4
+      section, now actually written into the notebook instead of only the
+      doc. Re-executed end-to-end (`.venv/bin/jupyter nbconvert --execute`,
+      18 cells), 0 errors; printed numbers match a standalone verification
+      script run against `results/results.csv` directly, computed
+      independently of the notebook.
+    - **Process note**: `jupyter`/`jupyter-nbconvert` on `$PATH` resolve to a
+      broken global install with no `nbconvert` module at all (`jupyter
+      nbconvert` fails with "command not found", silently swallowed by a
+      `| tee` pipeline's exit code). The project's own `.venv/bin/jupyter` is
+      the one that actually has `nbconvert` installed (`pyproject.toml`'s
+      `nbconvert>=7.16` dependency) — use it explicitly for any future
+      notebook re-execution in this repo, not bare `jupyter`.
+
 ## Framing notes
 
 - Existing Metropolis MC code is on-topic (SA is a Category-D example), not dead weight.
