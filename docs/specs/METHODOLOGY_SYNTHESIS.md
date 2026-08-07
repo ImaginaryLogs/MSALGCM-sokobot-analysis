@@ -205,7 +205,7 @@ a map, not a summary — read the methodology section that follows for the actua
 | RQ3 | Do local node-level behaviors and step-to-step transition dynamics look similar? | `cross_domain_analysis.ipynb`, S2/S3 | Built; one open item (frontier-row KL) needs verification before final citation |
 | RQ4 | Does tightening the heuristic/bound yield comparable efficiency gains, and what mediates the magnitude of the gain? | `analysis.ipynb`, Arm A | Built; synthesis rewritten, HP outlier table and exclusion count added (Track C, `DECISIONS.md` #24) |
 | RQ5 | Does weight-relaxation (trading optimality for speed) generalize as a paradigm, or is it specific to A*-style search? | `analysis.ipynb` Arm B + `cross_domain_analysis.ipynb` weight-sweep extension | Built in two places; not yet cross-referenced into one finding |
-| RQ6 | Do RQ2–RQ5's population-level findings hold for a specific proposed instance correspondence, rather than just in aggregate? | Not built | Scoped out for this data collection — verified below, both the general multi-pair test and the single cheapest-pair shortcut are currently blocked, for two independent, checked reasons, not just the missing mapping construction |
+| RQ6 | Do RQ2–RQ5's population-level findings hold for a specific proposed instance correspondence, rather than just in aggregate? | Single-pair shortcut: `25-30_Sokoban-Microban-30` / `hp_len11_0_seed42` (see below). Multi-pair: not built | Single-pair shortcut now computed with real numbers (`DECISIONS.md` #25) after `original3`/CRAMBIN turned out to be unconverged/artifact-affected. General multi-pair correspondence stays out of scope — the equivalence doc's mapping still isn't a runnable construction |
 
 ---
 
@@ -247,6 +247,13 @@ them. The throughline for a reader: in Sokoban, "how good is the heuristic" and 
 deadlock detector" are two separable knobs; in HP, they're fused into one. That distinction is the
 mechanism behind RQ4's findings and belongs in the document *before* RQ2, since nothing about
 "illegal state" can be compared topologically until it's been defined for each domain first.
+
+**Scope note applying to all four sections below (RQ2–RQ5).** Every finding in this block is a
+population-level or aggregate comparison (30-instance samples, whole-corpus pooling, or a single
+matched-pair spot check) — a *proxy* for whether the two domains' search spaces genuinely
+correspond, not a direct test of it. A direct test would need the runnable instance-to-instance
+mapping RQ6 asks for, which doesn't exist yet (see RQ6 below). Read every "Sokoban and HP show
+similar/dissimilar X" claim below with that caveat attached, not as a settled equivalence result.
 
 **RQ2 — topology of the visited region.** Built and solid — and, as of this session, actually
 verified rather than assumed. Sokoban's disconnectivity curve sits at a hard floor at `w = 1` for
@@ -341,45 +348,51 @@ Characteristics Comparison," is literally "To Be filled later." There is nothing
 so a systematic multi-pair correspondence test stays out of scope for this data collection.
 
 *The single-pair shortcut this section previously called "cheapest available step, requiring no
-new formal work" is also blocked — not by the missing mapping construction, but by two independent,
-checked data problems specific to the `original3`/CRAMBIN pair* (the pair was picked for
-decision #18's null-model control because it's the largest available trace per domain, not because
-either instance is a converged, ratio-ready run):
+new formal work" was initially attempted against `original3`/CRAMBIN — the pair decision #18's
+null-model control already used, since it's the largest available trace per domain — but that pair
+turned out to be blocked by two independent, checked data problems: `original3` had never been run
+to a proven-optimal solve on either heuristic (`solved=cutoff` at the 2,000,000-eval cap, no
+Hungarian run at all), and CRAMBIN's capped trace happened to contain zero `status=pruned` rows (a
+`trace_node_cap` artifact, decision #20 — not evidence HP doesn't prune on chains this size).
+Rather than re-running either instance to convergence (attempted once on real hardware, aborted —
+the run crashed before completing at a 50M-eval budget), a different, already-converged matched
+pair from the existing corpus was used instead, per this section's own fallback recommendation.
+Both instances below were already run to a proven-optimal, equal-quality solve on both heuristic
+arms in the corpus this project already has — no new runs needed.
 
-1. **RQ4's ratio computation doesn't have a matched pair to compute.** `results/results.csv` shows
-   `original3` has exactly one Sokoban run — manhattan, `w=1` — and it never solved: `solved=cutoff`,
-   `cutoff_reason=budget`, `solution_quality=NA` at the 2,000,000-eval cap. No Hungarian run for
-   `original3` exists at all (true of `original1`/`original2` too — none of the three hand-picked
-   "original" maps has ever been run to a proven-optimal solve on either heuristic). CRAMBIN has both
-   `bound=tight` and `bound=weak` runs, but both also hit the exact 2,000,000-eval cap with
-   `solution_quality=8` as an unproven incumbent, not a certified optimum. RQ4's methodology (stated
-   earlier in this document) requires equal-quality, optimality-preserving solves on both arms before
-   a ratio is defensible — neither instance clears that bar, so the ratio can't be computed for this
-   pair, full stop, independent of anything about a mapping construction.
-2. **RQ1's taxonomy extension is real for Sokoban and empty for HP, and the HP side is explainable,
-   not a mystery.** Sokoban's `original3` trace gives a clean, real number — 106,855 of 180,549
-   expanded-or-pruned nodes were pruned, **59.18%**, matching the ~59% population figure from RQ1
-   almost exactly, a genuine confirmation at the instance level. CRAMBIN's trace, by contrast,
-   contains **zero** `status=pruned` rows in its full 500,000-row capped trace. Checked whether this
-   is CRAMBIN-specific: it isn't — 3 of the other 20 HP trace files that also hit the
-   `trace_node_cap` show zero pruned rows too (alongside others showing anywhere from a handful to
-   several thousand), so this is the same `trace_node_cap` artifact already documented in decision
-   #20 (frontier-row corruption), now shown to also suppress the pruned-rate signal on some capped
-   instances: bound-pruning only becomes frequent once the B&B incumbent has tightened enough to
-   reject candidates, and on this instance that point falls past the 500,000-row window. It is not
-   evidence HP doesn't prune on chains this size — decision #15's population data shows bound-prune
-   firing thousands of times on comparable lengths — it's evidence this specific capped trace hasn't
-   reached that region yet.
+**The replacement pair: `25-30_Sokoban-Microban-30` (Sokoban, 3 crates) and `hp_len11_0_seed42`
+(HP, chain length 11).** Picked from `results/results.csv`/`results/traces` by filtering to
+instances solved to equal quality on both heuristic arms with a small, uncapped trace, then
+preferring an HP candidate with a non-zero pruned-row count (avoiding CRAMBIN's artifact) and a
+Sokoban candidate whose pruned rate happened to land close to the ~59% population figure already
+cited elsewhere in this document, for a cleaner side-by-side than an arbitrary pick would have
+given:
 
-**Net effect:** the matched pair currently produces one real, checked number (Sokoban's 59.18%
-prune rate) and cannot currently produce HP's counterpart or any RQ4 ratio. If this pair is worth
-completing later, the fix is not the equivalence-mapping construction — it's re-running `original3`
-with a Hungarian heuristic to convergence (or picking a different, already-converged matched pair
-for RQ4), and either raising `trace_node_cap` for CRAMBIN or accepting its RQ1 number as
-not-yet-computable. Until then, RQ6 stays explicitly out of scope for this data collection: the
-population-level findings in RQ2–RQ5 above are a proxy for equivalence, not a direct test of it, and
-that limitation should be stated plainly wherever those findings are reported rather than left
-implicit.
+1. **RQ4's ratio, computed for real.** Sokoban: manhattan=20 evals, hungarian=16 evals (both solve
+   to `solution_quality=5`), **ratio = 1.25**. HP: weak=3,238 evals, tight=2,817 evals (both solve
+   to `solution_quality=2`), **ratio ≈ 1.149**. Both sit close to their respective domain's overall
+   median (Sokoban 1.086, HP 1.022, `DECISIONS.md` #24) — unsurprising for two small, unremarkable
+   instances rather than tail outliers, and a useful contrast with `original3`/CRAMBIN's total
+   inability to produce a ratio at all.
+2. **RQ1's taxonomy extension, computed for both sides this time.** Sokoban's trace: 28 of 48
+   expanded-or-pruned nodes pruned, **58.33%** — consistent with the ~59% population figure and
+   `original3`'s own 59.18% instance-level number. HP's trace: 352 of 3,169 expanded-or-pruned nodes
+   pruned, **11.11%** — a real, non-degenerate number this time, not the zero-pruned artifact
+   CRAMBIN produced. The two numbers aren't expected to match each other (RQ1's taxonomy already
+   establishes the two domains reject candidates through different mechanisms — Sokoban's deadlock
+   prune and HP's bound-prune aren't the same kind of event), so the meaningful comparison isn't
+   "which percentage is bigger" but "both domains now have a real, checked, non-artifact number for
+   this specific matched pair," which `original3`/CRAMBIN could not provide for the HP side.
+
+**Net effect:** the single-pair shortcut is no longer blocked — both problems that stopped
+`original3`/CRAMBIN are absent for this pair, since it was selected specifically for having already
+converged and having a clean trace. It's still not the general multi-pair correspondence test:
+that path stays out of scope regardless of which pair is used, since
+`docs/equivalence/sokoban_hp-latice_equivalence.md`'s Layer 5/6 mapping still doesn't exist as a
+runnable construction. RQ2–RQ5's population-level findings remain a proxy for equivalence, not a
+direct test of it, and that limitation should be stated plainly wherever those findings are
+reported rather than left implicit — this single matched pair is one additional, real data point
+alongside the population findings, not a replacement for them.
 
 ---
 
@@ -541,7 +554,7 @@ noted.
       `notebooks/analysis.ipynb` cells 3 and 7 directly: both the Sokoban and HP Arm A ratio plots
       already use `instance_size` as the x-axis. No new work needed.
 
-**Track F — RQ6 scoping (resolved this session; two follow-ups left if anyone wants to reopen it)**
+**Track F — RQ6 scoping (fully resolved this session, including both follow-ups, `DECISIONS.md` #21/#25)**
 - [x] Determine whether `docs/equivalence/sokoban_hp-latice_equivalence.md`'s proposed mapping
       exists as a runnable construction. **No** — its Layer 5 mapping is prose/category-level, Layer
       6 is unwritten. Multi-pair RQ6 stays out of scope.
@@ -551,9 +564,16 @@ noted.
       solve on both heuristic arms (blocks RQ4's ratio), and CRAMBIN's capped trace has zero
       `pruned` rows (blocks RQ1's HP-side number) — see the RQ6 section above for the numbers.
       Sokoban's RQ1 number (59.18% pruned, `original3`) is real and now stated there.
-- [ ] If reopened later: either re-run `original3` with Hungarian to convergence and pick an
-      HP instance/cap that actually shows pruning, or choose a different matched pair that both
-      engines already solved to proven optimality on both heuristic variants, for a cleaner
-      single-pair RQ4 test.
-- [ ] Scope note for RQ2–RQ5 write-ups: state plainly that population-level findings are a proxy
-      for equivalence, not a direct test of it, per the resolution above.
+- [x] Reopened this session (`DECISIONS.md` #25). A real re-run of `original3` with Hungarian was
+      attempted first at a 50M-eval budget on other hardware and crashed before completing — rather
+      than debug that, took this section's own fallback: picked a different matched pair already
+      solved to proven optimality on both heuristic variants from the existing corpus,
+      `25-30_Sokoban-Microban-30` / `hp_len11_0_seed42`. Both blockers are resolved for this pair —
+      RQ4 ratios computed (Sokoban 1.25, HP ≈1.149) and RQ1's HP-side pruned rate is a real non-zero
+      number (11.11%, vs. Sokoban's 58.33%) — see the rewritten RQ6 section above for the full
+      numbers. The general multi-pair path is still out of scope; only the single-pair shortcut was
+      reopened.
+- [x] Scope note for RQ2–RQ5 write-ups: state plainly that population-level findings are a proxy
+      for equivalence, not a direct test of it, per the resolution above. Added as a shared note
+      immediately before the RQ2 section (applies to RQ2–RQ5 collectively, rather than repeating the
+      same sentence four times).

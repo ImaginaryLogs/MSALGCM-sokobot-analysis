@@ -661,6 +661,43 @@ links out to those and keeps a one-line summary.
       `nbconvert>=7.16` dependency) — use it explicitly for any future
       notebook re-execution in this repo, not bare `jupyter`.
 
+25. **Track F reopened: RQ6's single-pair shortcut, blocked by `original3`/CRAMBIN in
+    decision #21, now computed against a different matched pair from the existing
+    corpus — `25-30_Sokoban-Microban-30` (3 crates) / `hp_len11_0_seed42`
+    (chain length 11).**
+    - **Why not `original3`/CRAMBIN after all**: a real attempt to re-run `original3`
+      with Hungarian to convergence (per #21's stated fix) at a 50M-eval budget
+      crashed on the hardware it was run on before completing. Rather than debug
+      that crash, took #21's own documented fallback instead: pick a different pair
+      already solved to proven optimality on both heuristic arms, from data already
+      in this repo — no new runs needed.
+    - **Selection**: filtered `results/results.csv` to instances with `solved=1` on
+      both arms at equal quality, then to the smallest such instances per domain with
+      an uncapped trace, preferring an HP candidate with a non-zero `pruned` row
+      count (avoiding CRAMBIN's `trace_node_cap` zero-pruned artifact, #20) and a
+      Sokoban candidate whose pruned rate landed close to the ~59% population figure
+      already cited elsewhere, for a cleaner side-by-side.
+    - **RQ4 ratio, now computable for this pair**: Sokoban manhattan=20 evals,
+      hungarian=16 evals, both solve to `solution_quality=5` — ratio=1.25. HP
+      weak=3,238 evals, tight=2,817 evals, both solve to `solution_quality=2` —
+      ratio≈1.149. Both close to their domain's overall median (#24), consistent
+      with picking an unremarkable instance rather than a tail outlier.
+    - **RQ1 taxonomy extension, now real on both sides**: Sokoban's trace — 28 of 48
+      expanded-or-pruned nodes pruned, 58.33% (consistent with `original3`'s 59.18%
+      and the ~59% population figure). HP's trace — 352 of 3,169 expanded-or-pruned
+      nodes pruned, 11.11% — a real, non-degenerate number, unlike CRAMBIN's zero.
+      The two percentages aren't expected to match each other (RQ1's taxonomy
+      already establishes the domains reject candidates through different
+      mechanisms); the point is that both sides now have a real number at all.
+    - **Scope, unchanged**: this reopens only the single-pair shortcut. The general
+      multi-pair correspondence test stays out of scope — nothing about
+      `docs/equivalence/sokoban_hp-latice_equivalence.md`'s unwritten Layer 6
+      changed.
+    - **RQ2–RQ5 scope note**: added a shared paragraph immediately before RQ2 in
+      `docs/specs/METHODOLOGY_SYNTHESIS.md` stating plainly that every RQ2–RQ5
+      finding is a population/aggregate proxy for equivalence, not a direct test of
+      it, rather than leaving that caveat implicit or only inside RQ6's own section.
+
 ## Framing notes
 
 - Existing Metropolis MC code is on-topic (SA is a Category-D example), not dead weight.
